@@ -1,0 +1,30 @@
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+backend/tests/output/
+*.log

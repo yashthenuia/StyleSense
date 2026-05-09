@@ -1,0 +1,79 @@
+"""Verify Supabase JWT and resolve the current user from a request.
+
+We verify locally using the Supabase JWT secret (avoids round-tripping to Supabase
+on every request). The secret is the legacy 'JWT secret' from the Supabase project
+settings - NOT the same as the anon/service-role keys.
+
+For simplicity in the hackathon, we also support verifying via the Supabase REST API
+(supabase.auth.get_user(token)) when the JWT secret isn't configured.
+"""
+import os
+import logging
+from typing import Optional
+from fastapi import Header, HTTPException, Depends
+from supabase import create_client
+
+logger = logging.getLogger(__name__)
+
+_SUPABASE_URL = os.getenv("SUPABASE_URL")
+_SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+_anon_client = None
+
+
+def _get_anon_client():
+    """A separate client for token verification (uses service role to call auth admin API)."""
+    global _anon_client
+    if _anon_client is None:
+        _anon_client = create_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
+    return _anon_client
+
+
+def _verify_token_via_api(token: str) -> dict:
+    """Ask Supabase to validate the JWT and return the user. ~50ms round trip."""
+    client = _get_anon_client()
+    try:
+        # supabase.auth.get_user(jwt) returns a UserResponse
+        res = client.auth.get_user(token)
+        if not res or not res.user:
+            raise HTTPException(401, "Invalid token")
+        return {"id": res.user.id, "email": res.user.email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"JWT verification failed: {e}")
+        raise HTTPException(401, "Invalid or expired token")
+
+
+async def current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """
+    FastAPI dependency: returns {id, email} for the authenticated user.
+    Raises 401 if missing or invalid.
+
+    Usage:
+        @router.get("/me")
+        async def me(user = Depends(current_user)):
+            return user
+    """
+    if not authorization:
+        raise HTTPException(401, "Missing Authorization header")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(401, "Authorization header must be 'Bearer <token>'")
+    token = parts[1]
+    return _verify_token_via_api(token)
+
+
+async def optional_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Same as current_user but returns None instead of 401 if missing/invalid."""
+    if not authorization:
+        return None
+    try:
+        return await current_user(authorization)
+    except HTTPException:
+        return None
+
+
+# Convenience for routes that take user_id in path/body and want to ensure it matches
+def require_self(user_id: str, current: dict) -> None:
+    if str(user_id) != str(current["id"]):
+        raise HTTPException(403, "You can only access your own data.")

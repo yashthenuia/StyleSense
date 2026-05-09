@@ -1,0 +1,123 @@
+"""Try-on, event scene, and animation endpoints."""
+from fastapi import APIRouter, HTTPException, Depends
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+
+from models.schemas import TryOnRequest, MultiItemTryOnRequest, EventSceneRequest, AnimateRequest
+from services import runway_service, supabase_service
+from services.auth_service import current_user
+
+router = APIRouter()
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+async def _run_blocking(fn, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
+
+
+@router.post("/generate")
+async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
+    if "localhost" in req.avatar_selfie_url or "localhost" in req.item_image_url:
+        raise HTTPException(400, "URLs must be public HTTPS, not localhost. Upload to Supabase first.")
+
+    try:
+        result = await _run_blocking(
+            runway_service.runway_generate_tryon,
+            avatar_url=req.avatar_selfie_url,
+            item_url=req.item_image_url,
+            item_name=req.item_name,
+            item_category=req.item_category,
+            model=req.model,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    saved = supabase_service.save_tryon_result(
+        user_id=user["id"],
+        item_id=req.wardrobe_item_id,
+        result_url=result["image_url"],
+        model_used=result["model_used"],
+        prompt_used=result["prompt_used"],
+        runway_task_id=result["task_id"],
+    )
+
+    return {
+        "result_image_url": result["image_url"],
+        "result_id": saved["id"],
+        "model_used": result["model_used"],
+    }
+
+
+@router.post("/generate-multi")
+async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(current_user)):
+    if not req.items:
+        raise HTTPException(400, "Need at least one item.")
+    if len(req.items) > 2:
+        raise HTTPException(400, "Max 2 items at once.")
+
+    try:
+        result = await _run_blocking(
+            runway_service.runway_generate_multi_tryon,
+            avatar_url=req.avatar_selfie_url,
+            items=req.items,
+            model=req.model,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    saved = supabase_service.save_tryon_result(
+        user_id=user["id"],
+        item_id=None,
+        result_url=result["image_url"],
+        model_used=result["model_used"],
+        prompt_used=result["prompt_used"],
+        runway_task_id=result["task_id"],
+    )
+
+    return {
+        "result_image_url": result["image_url"],
+        "result_id": saved["id"],
+        "model_used": result["model_used"],
+    }
+
+
+@router.post("/event-scene")
+async def event_scene(req: EventSceneRequest, user = Depends(current_user)):
+    try:
+        result = await _run_blocking(
+            runway_service.runway_event_scene,
+            tryon_url=req.tryon_result_url,
+            event_context=req.event_context,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    if req.tryon_result_id:
+        supabase_service.update_tryon_event_scene(
+            req.tryon_result_id, result["image_url"], req.event_context
+        )
+
+    return {"event_image_url": result["image_url"], "task_id": result["task_id"]}
+
+
+@router.post("/animate")
+async def animate(req: AnimateRequest, user = Depends(current_user)):
+    try:
+        result = await _run_blocking(
+            runway_service.runway_animate,
+            image_url=req.image_url,
+            motion_prompt=req.motion_prompt,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    if req.tryon_result_id:
+        supabase_service.update_tryon_video(req.tryon_result_id, result["video_url"], result["task_id"])
+
+    return {"video_url": result["video_url"], "task_id": result["task_id"]}
+
+
+@router.get("/recent")
+async def recent(limit: int = 12, user = Depends(current_user)):
+    return supabase_service.get_recent_tryons(user["id"], limit)
