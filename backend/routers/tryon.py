@@ -29,6 +29,7 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
             item_name=req.item_name,
             item_category=req.item_category,
             model=req.model,
+            setting=req.setting,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
@@ -53,8 +54,8 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
 async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(current_user)):
     if not req.items:
         raise HTTPException(400, "Need at least one item.")
-    if len(req.items) > 2:
-        raise HTTPException(400, "Max 2 items at once.")
+    if len(req.items) > 6:
+        raise HTTPException(400, "Max 6 items at once (composite layout limit).")
 
     try:
         result = await _run_blocking(
@@ -62,6 +63,9 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
             avatar_url=req.avatar_selfie_url,
             items=req.items,
             model=req.model,
+            setting=req.setting,
+            storage_uploader=supabase_service.upload_to_storage,
+            user_id=user["id"],
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))

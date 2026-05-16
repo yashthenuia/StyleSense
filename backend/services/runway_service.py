@@ -1,19 +1,26 @@
 """All Runway SDK calls live here.
 
-CRITICAL RULES (verified against docs.dev.runwayml.com 2026-01):
-- All image URLs passed to Runway MUST be publicly accessible HTTPS (NOT localhost).
-- Reference image tags are FREE-FORM strings - reference them via @tag in prompt_text.
-  Up to 3 reference images per text_to_image call.
-- Use gen4_image_turbo during dev (2 credits/img), gen4_image for demo recording (5+ credits).
-- Polling is handled by .wait_for_task_output() - don't roll your own loop.
+Verified against docs.dev.runwayml.com (2026-01):
+- Image URLs MUST be public HTTPS (not localhost).
+- reference_images tags are FREE-FORM strings; reference via @tag in prompt_text.
+- Up to 3 reference images per text_to_image call.
+
+Quality strategy (informed by competitor benchmarking):
+- Default model is gen4_image (5cr) - higher fidelity than gen4_image_turbo.
+- Multi-item try-on uses a composite product flat-lay (one image with all items)
+  rather than separate refs - same approach TheNewBlack.ai uses for its results.
+- Prompts emphasize cinematic editorial photography with specific lighting, depth,
+  and composition cues that produce magazine-quality output.
 """
+import io
 import os
 import logging
+import httpx
+from PIL import Image
 from runwayml import RunwayML, TaskFailedError, TaskTimeoutError
 
 logger = logging.getLogger(__name__)
 
-# Support both env var names (SDK reads RUNWAYML_API_SECRET by default)
 _API_KEY = os.getenv("RUNWAY_API_KEY") or os.getenv("RUNWAYML_API_SECRET")
 if not _API_KEY:
     raise RuntimeError(
@@ -24,34 +31,106 @@ client = RunwayML(api_key=_API_KEY)
 
 
 # ───────────────────────────── PROMPTS ───────────────────────────── #
+# Cinematic editorial style prompts. Specific descriptors >>> generic ones.
 
 PROMPT_TRYON_SINGLE = (
-    "Photorealistic full-body fashion photograph of @selfie wearing @garment. "
-    "Studio lighting, clean neutral background, sharp focus, magazine editorial quality. "
-    "Preserve the exact face, hair, skin tone, and body proportions of @selfie. "
-    "The garment from @garment is rendered with accurate color, texture, fit and silhouette."
+    "Cinematic editorial fashion photograph of @selfie wearing the @garment, full body, "
+    "{setting}. The person's face, hair, skin tone, and body proportions from @selfie are "
+    "preserved exactly with no alterations. The garment from @garment is rendered with "
+    "accurate color, fabric texture, fit, drape, and silhouette. "
+    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
+    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
+    "8K detail, hyperrealistic, high dynamic range."
 )
 
 PROMPT_TRYON_MULTI = (
-    "Photorealistic full-body fashion photograph of @selfie wearing {item_phrase}. "
-    "Studio lighting, clean neutral background, magazine editorial quality. "
-    "Preserve the exact face and body of @selfie. "
-    "Render each garment with accurate color, fit and texture."
+    "Cinematic editorial fashion photograph of @selfie wearing the complete outfit shown in @products, "
+    "full body, {setting}. Render every garment, accessory, watch and footwear from @products "
+    "exactly as pictured - preserve color, texture, fit and proportions. "
+    "The person's face, hair, skin tone, and body from @selfie are preserved exactly. "
+    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
+    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
+    "8K detail, hyperrealistic, high dynamic range."
 )
 
 PROMPT_EVENT_SCENE = (
-    "Photorealistic editorial photograph of @subject standing at {event_context}. "
-    "Full body visible, the outfit on @subject is the focus. "
-    "Cinematic natural lighting matching the scene, candid confident pose, "
-    "depth of field, professional fashion photography."
+    "Cinematic editorial photograph of @subject at {event_context}. Full body visible, "
+    "the outfit on @subject is the focus. Shot on 50mm lens with shallow depth of field, "
+    "natural cinematic lighting that matches the scene's mood, candid confident pose, "
+    "magazine fashion editorial, photorealistic, hyperdetailed, 8K, high dynamic range. "
+    "Preserve face and outfit exactly from @subject."
+)
+
+DEFAULT_SETTING = (
+    "softly lit luxury studio setting with neutral warm grey background, golden hour ambient "
+    "light from camera left, subtle rim light, minimal shadows"
 )
 
 
 # ───────────────────────────── HELPERS ───────────────────────────── #
 
-def _model_supports_three_refs(model: str) -> bool:
-    """gen4_image variants support up to 3 reference images. Some others may not."""
-    return model.startswith("gen4_image") or model.startswith("gemini_image")
+def _to_aspect_ratio(model: str) -> str:
+    """Default ratio for portrait fashion photos."""
+    if model == "gen4_image" or model == "gen4_image_turbo":
+        return "720:1280"
+    if model.startswith("gen4.5"):
+        return "720:1280"
+    return "720:1280"
+
+
+def composite_product_collage(item_image_urls: list[str], width: int = 1024, height: int = 1024) -> bytes:
+    """
+    Build ONE flat-lay collage from multiple item images. This is the same trick
+    TheNewBlack.ai uses to bypass Runway's 3-reference limit and feed the model
+    a single, coherent "outfit reference".
+
+    Layout: items arranged in a grid on a clean white background, each centered
+    in its cell with margin. JPEG output.
+    """
+    if not item_image_urls:
+        raise ValueError("Need at least one item image")
+
+    # Download
+    items = []
+    headers = {"User-Agent": "Mozilla/5.0 StyleAI/1.0"}
+    with httpx.Client(timeout=20.0, follow_redirects=True, headers=headers) as c:
+        for url in item_image_urls:
+            r = c.get(url)
+            r.raise_for_status()
+            items.append(Image.open(io.BytesIO(r.content)).convert("RGBA"))
+
+    # Pick a grid layout. 1=1x1, 2=2x1, 3-4=2x2, 5-6=3x2
+    n = len(items)
+    if n == 1: cols, rows = 1, 1
+    elif n == 2: cols, rows = 2, 1
+    elif n <= 4: cols, rows = 2, 2
+    else: cols, rows = 3, 2
+
+    canvas = Image.new("RGB", (width, height), (255, 255, 255))
+    cell_w = width // cols
+    cell_h = height // rows
+    pad = 24
+
+    for i, img in enumerate(items[: cols * rows]):
+        col = i % cols
+        row = i // cols
+        # Fit each item in its cell while preserving aspect ratio
+        max_w = cell_w - 2 * pad
+        max_h = cell_h - 2 * pad
+        ratio = min(max_w / img.width, max_h / img.height)
+        new_w = max(1, int(img.width * ratio))
+        new_h = max(1, int(img.height * ratio))
+        resized = img.resize((new_w, new_h), Image.LANCZOS)
+        x = col * cell_w + (cell_w - new_w) // 2
+        y = row * cell_h + (cell_h - new_h) // 2
+        if resized.mode == "RGBA":
+            canvas.paste(resized, (x, y), mask=resized.split()[3])
+        else:
+            canvas.paste(resized, (x, y))
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="JPEG", quality=92)
+    return buf.getvalue()
 
 
 # ───────────────────────────── TRY-ON ───────────────────────────── #
@@ -61,37 +140,25 @@ def runway_generate_tryon(
     item_url: str,
     item_name: str,
     item_category: str = "tops",
-    model: str = "gen4_image_turbo",
+    model: str = "gen4_image",
+    setting: str | None = None,
 ) -> dict:
-    """
-    Generate single-item try-on image.
-
-    Args:
-        avatar_url: HTTPS URL of user selfie (Supabase Storage public URL).
-        item_url:   HTTPS URL of clothing item.
-        item_name:  Human-readable name (e.g. "Navy linen blazer").
-        item_category: tops|bottoms|dresses|outerwear|shoes|accessories
-        model:      gen4_image (best) or gen4_image_turbo (fast/cheap).
-
-    Returns:
-        dict with: image_url, task_id, model_used, prompt_used
-    """
-    prompt = PROMPT_TRYON_SINGLE.format()  # placeholders are static here
+    """Generate single-item try-on. Defaults to full-quality gen4_image."""
+    prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
-            ratio="720:1280",  # portrait, best for fashion full-body
+            ratio=_to_aspect_ratio(model),
             reference_images=[
                 {"uri": avatar_url, "tag": "selfie"},
                 {"uri": item_url, "tag": "garment"},
             ],
         ).wait_for_task_output(timeout=300)
 
-        image_url = task.output[0]
         return {
-            "image_url": image_url,
+            "image_url": task.output[0],
             "task_id": task.id,
             "model_used": model,
             "prompt_used": prompt,
@@ -100,41 +167,65 @@ def runway_generate_tryon(
         logger.error(f"Runway try-on failed: {e.task_details}")
         raise RuntimeError(f"Runway generation failed: {e.task_details}")
     except TaskTimeoutError:
-        logger.error("Runway try-on timed out after 5min")
         raise RuntimeError("Generation timed out (5 minutes)")
 
 
 def runway_generate_multi_tryon(
     avatar_url: str,
     items: list,
-    model: str = "gen4_image_turbo",
+    model: str = "gen4_image",
+    setting: str | None = None,
+    storage_uploader=None,
+    user_id: str | None = None,
 ) -> dict:
     """
-    Generate multi-item try-on (e.g. top + bottom together).
-    Max 2 items (selfie counts as the 3rd reference).
+    Multi-item try-on. Builds ONE composite product image from all items
+    (TheNewBlack approach), uploads to Supabase, then sends to Runway as a
+    single 'products' reference. This unlocks any number of items (not just 2)
+    AND gives Runway clearer outfit context.
+
+    Args:
+        storage_uploader: callable like supabase_service.upload_to_storage
+        user_id: required if storage_uploader is provided
     """
-    if len(items) < 1:
+    if not items:
         raise ValueError("Need at least one item")
-    if len(items) > 2:
-        raise ValueError("Max 2 items at once (Runway allows 3 refs total incl. selfie)")
 
-    # Build reference list and prompt phrasing
-    refs = [{"uri": avatar_url, "tag": "selfie"}]
-    item_phrases = []
-    for i, item in enumerate(items, start=1):
-        tag = f"item{i}"
-        refs.append({"uri": item["image_url"], "tag": tag})
-        item_phrases.append(f"@{tag}")
+    item_urls = [it["image_url"] for it in items]
 
-    item_phrase = " and ".join(item_phrases)
-    prompt = PROMPT_TRYON_MULTI.format(item_phrase=item_phrase)
+    if len(items) == 1:
+        # Single item - use the simpler path
+        return runway_generate_tryon(
+            avatar_url=avatar_url,
+            item_url=item_urls[0],
+            item_name=items[0].get("name", "item"),
+            item_category=items[0].get("category", "tops"),
+            model=model,
+            setting=setting,
+        )
+
+    # Build composite
+    if storage_uploader is None or user_id is None:
+        raise ValueError("Multi-item try-on requires storage_uploader + user_id to host the composite")
+
+    collage_bytes = composite_product_collage(item_urls)
+    composite_url = storage_uploader(
+        bucket="wardrobe", user_id=user_id,
+        file_bytes=collage_bytes, filename="products-composite.jpg",
+        content_type="image/jpeg",
+    )
+
+    prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
-            ratio="720:1280",
-            reference_images=refs,
+            ratio=_to_aspect_ratio(model),
+            reference_images=[
+                {"uri": avatar_url, "tag": "selfie"},
+                {"uri": composite_url, "tag": "products"},
+            ],
         ).wait_for_task_output(timeout=300)
 
         return {
@@ -142,6 +233,7 @@ def runway_generate_multi_tryon(
             "task_id": task.id,
             "model_used": model,
             "prompt_used": prompt,
+            "products_composite_url": composite_url,
         }
     except TaskFailedError as e:
         raise RuntimeError(f"Runway multi-tryon failed: {e.task_details}")
@@ -152,22 +244,16 @@ def runway_generate_multi_tryon(
 # ───────────────────────────── EVENT SCENE ───────────────────────────── #
 
 def runway_event_scene(tryon_url: str, event_context: str) -> dict:
-    """
-    Take an existing try-on image and place the subject in an event scene.
-    Uses gen4_image with the try-on result as the only reference.
-    """
+    """Place subject of a try-on into a scene."""
     prompt = PROMPT_EVENT_SCENE.format(event_context=event_context)
 
     try:
         task = client.text_to_image.create(
             model="gen4_image",
             prompt_text=prompt,
-            ratio="1024:1024",
-            reference_images=[
-                {"uri": tryon_url, "tag": "subject"},
-            ],
+            ratio="720:1280",
+            reference_images=[{"uri": tryon_url, "tag": "subject"}],
         ).wait_for_task_output(timeout=300)
-
         return {
             "image_url": task.output[0],
             "task_id": task.id,
@@ -182,43 +268,95 @@ def runway_event_scene(tryon_url: str, event_context: str) -> dict:
 
 # ───────────────────────────── ANIMATE ───────────────────────────── #
 
-def runway_animate(image_url: str, motion_prompt: str) -> dict:
+def runway_animate(
+    image_url: str,
+    motion_prompt: str = "",
+    model: str = "veo3.1",
+    ratio: str = "720:1280",
+    duration: int = 5,
+) -> dict:
     """
-    Animate a still try-on image into a 5-second video using gen4.5.
+    Animate a still image into a short video.
 
-    RULES:
-    - image_url must be HTTPS
-    - input aspect ratio must be 0.5 to 2.0 for gen4.5
-    - duration: 5 or 10 seconds (we use 5 for credit budget)
-    - cost: 60 credits for 5s
+    Default model is veo3.1 - Runway's most realistic image-to-video offering
+    (re-routed from Google Veo). Better motion + scene fidelity than gen4.5.
+    Falls back to gen4.5 automatically if veo3.1 fails.
+
+    Args:
+        ratio: Runway aspect ratio string. Common values: "720:1280" (portrait,
+            default - what try-ons use), "1280:720" (landscape - hero ramp videos).
+        duration: 5 is the canonical Studio default. veo3.1 only accepts 4/6/8 -
+            we silently bump 5 -> 6 for that model.
+
+    Cost: ~60-100 credits per clip depending on model.
     """
-    try:
-        task = client.image_to_video.create(
-            model="gen4.5",
+    # Cinematic motion prompt - emphasizes preserved background + natural movement
+    final_prompt = motion_prompt or (
+        "The subject moves naturally and confidently — turning slightly toward camera, "
+        "shifting weight, gentle hair movement, ambient breeze, alive eyes blinking. "
+        "Cinematic depth of field, hyperrealistic motion, smooth fluid camera, "
+        "preserve the background scene and lighting exactly. Fashion editorial film grade, "
+        "magazine quality 8K motion."
+    )
+
+    def _duration_for(m: str) -> int:
+        # veo3.1 only allows {4, 6, 8}; gen4.5 accepts 5
+        if m == "veo3.1" and duration == 5:
+            return 6
+        return duration
+
+    def _try(m: str):
+        return client.image_to_video.create(
+            model=m,
             prompt_image=image_url,
-            prompt_text=motion_prompt,
-            ratio="720:1280",  # portrait, matches our try-on output
-            duration=5,
+            prompt_text=final_prompt,
+            ratio=ratio,
+            duration=_duration_for(m),
         ).wait_for_task_output(timeout=300)
 
+    try:
+        task = _try(model)
         return {
             "video_url": task.output[0],
             "task_id": task.id,
-            "model_used": "gen4.5",
-            "prompt_used": motion_prompt,
+            "model_used": model,
+            "prompt_used": final_prompt,
         }
     except TaskFailedError as e:
+        # Newer models can be flaky / capacity-constrained. Fall back to gen4.5.
+        if model != "gen4.5":
+            logger.warning(f"{model} failed ({e.task_details}); falling back to gen4.5")
+            try:
+                task = _try("gen4.5")
+                return {
+                    "video_url": task.output[0],
+                    "task_id": task.id,
+                    "model_used": "gen4.5 (fallback)",
+                    "prompt_used": final_prompt,
+                }
+            except TaskFailedError as e2:
+                raise RuntimeError(f"Runway animate failed: {e2.task_details}")
         raise RuntimeError(f"Runway animate failed: {e.task_details}")
     except TaskTimeoutError:
         raise RuntimeError("Animation timed out")
+    except Exception as e:
+        # Likely a model-not-available error for newer models; auto-fall-back
+        if model != "gen4.5":
+            logger.warning(f"{model} not available ({e}); falling back to gen4.5")
+            try:
+                task = _try("gen4.5")
+                return {
+                    "video_url": task.output[0],
+                    "task_id": task.id,
+                    "model_used": "gen4.5 (fallback)",
+                    "prompt_used": final_prompt,
+                }
+            except Exception as e2:
+                raise RuntimeError(f"Runway animate failed: {e2}")
+        raise RuntimeError(f"Runway animate failed: {e}")
 
-
-# ───────────────────────────── EPHEMERAL UPLOAD ───────────────────────────── #
 
 def runway_upload_ephemeral(image_bytes: bytes, content_type: str, name: str = "upload.jpg") -> str:
-    """
-    Upload bytes to Runway ephemeral storage. Returns runway:// URI valid 24h.
-    Use ONLY when you can't get a public HTTPS URL (we always can via Supabase).
-    """
+    """Upload bytes to Runway ephemeral storage. 24h expiry."""
     upload = client.assets.upload(data=image_bytes, content_type=content_type, name=name)
     return upload.uri

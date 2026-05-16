@@ -1,5 +1,5 @@
 """Saved outfits CRUD."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from models.schemas import SaveOutfit
 from services import supabase_service
 from services.auth_service import current_user
@@ -22,3 +22,14 @@ async def save_outfit(req: SaveOutfit, user = Depends(current_user)):
         preview_image_url=req.preview_image_url,
         notes=req.notes,
     )
+
+
+@router.delete("/{outfit_id}")
+async def delete_outfit(outfit_id: str, user = Depends(current_user)):
+    o = supabase_service.get_outfit(outfit_id)
+    if not o:
+        raise HTTPException(404, "Outfit not found")
+    if o["user_id"] != user["id"]:
+        raise HTTPException(403, "Not your outfit")
+    supabase_service.delete_outfit(outfit_id)
+    return {"deleted": True}

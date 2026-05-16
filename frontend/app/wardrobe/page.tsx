@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Plus, Trash2, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload } from "lucide-react";
+import { Plus, Trash2, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
-import type { WardrobeItem } from "@/types";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import type { WardrobeItem, DetectedItem } from "@/types";
 
 const CATEGORIES = ["all", "tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"];
 const OCCASIONS = ["any", "casual", "formal", "evening", "sport", "beach"];
@@ -20,6 +21,7 @@ export default function WardrobePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toggleSelected, selectedItemIds, clearSelected } = useAppStore();
+  const [pendingDelete, setPendingDelete] = useState<WardrobeItem | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -35,8 +37,7 @@ export default function WardrobePage() {
 
   useEffect(() => { if (user) refresh(); }, [user]);
 
-  async function deleteItem(id: string) {
-    if (!confirm("Remove this item?")) return;
+  async function performDelete(id: string) {
     try {
       await apiDelete(`/api/wardrobe/${id}`);
       setItems((prev) => prev.filter((i) => i.id !== id));
@@ -123,7 +124,7 @@ export default function WardrobePage() {
                   {selected && (
                     <div
                       className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs"
-                      style={{ background: "var(--gold)", color: "var(--bg)" }}
+                      style={{ background: "var(--gold)", color: "var(--on-gold)" }}
                     >
                       {selectedItemIds.indexOf(item.id) + 1}
                     </div>
@@ -137,7 +138,7 @@ export default function WardrobePage() {
                       <button
                         className="opacity-0 group-hover:opacity-100 transition"
                         style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
-                        onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
+                        onClick={(e) => { e.stopPropagation(); setPendingDelete(item); }}
                         aria-label="Delete"
                       >
                         <Trash2 size={14} />
@@ -158,7 +159,7 @@ export default function WardrobePage() {
         >
           <span className="text-sm">
             <strong style={{ color: "var(--gold)" }}>{selectedItemIds.length}</strong> selected
-            {selectedItemIds.length === 2 && <span style={{ color: "var(--text-muted)" }}> (max)</span>}
+            {selectedItemIds.length >= 6 && <span style={{ color: "var(--text-muted)" }}> (max)</span>}
           </span>
           <button className="btn-secondary" onClick={clearSelected} style={{ padding: "0.4rem 0.9rem" }}>
             Clear
@@ -170,13 +171,37 @@ export default function WardrobePage() {
       )}
 
       <AnimatePresence>
-        {showAdd && <AddItemModal onClose={() => setShowAdd(false)} onAdded={(item) => { setItems((p) => [item, ...p]); setShowAdd(false); }} />}
+        {showAdd && (
+          <AddItemModal
+            onClose={() => setShowAdd(false)}
+            onAdded={(item) => { setItems((p) => [item, ...p]); setShowAdd(false); }}
+            onAddedMany={(rows) => { setItems((p) => [...rows, ...p]); setShowAdd(false); }}
+          />
+        )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title="Remove this item?"
+        description={pendingDelete?.name}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => pendingDelete && performDelete(pendingDelete.id)}
+      />
     </div>
   );
 }
 
-function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (item: WardrobeItem) => void }) {
+function AddItemModal({
+  onClose,
+  onAdded,
+  onAddedMany,
+}: {
+  onClose: () => void;
+  onAdded: (item: WardrobeItem) => void;
+  onAddedMany: (rows: WardrobeItem[]) => void;
+}) {
   const [tab, setTab] = useState<"upload" | "url">("upload");
 
   // Upload state
@@ -195,6 +220,11 @@ function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ite
   const [color, setColor] = useState("");
   const [brand, setBrand] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Multi-item review state
+  const [phase, setPhase] = useState<"form" | "detecting" | "checklist">("form");
+  const [detected, setDetected] = useState<DetectedItem[]>([]);
+  const [detectedSourceUrl, setDetectedSourceUrl] = useState<string | null>(null);
 
   function handleFile(f: File) {
     setFile(f);
@@ -222,24 +252,15 @@ function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ite
     }
   }
 
+  // For URL tab: same as before. For Upload tab: detect first, then route to
+  // either single-item upload or the multi-item checklist.
   async function submit() {
-    if (!name.trim()) { toast.error("Name is required."); return; }
-    setSubmitting(true);
-    try {
-      let item: WardrobeItem;
-      if (tab === "upload") {
-        if (!file) { toast.error("Upload a file first."); setSubmitting(false); return; }
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("name", name);
-        fd.append("category", category);
-        fd.append("occasion", occasion);
-        if (color) fd.append("color", color);
-        if (brand) fd.append("brand", brand);
-        item = await apiUpload<WardrobeItem>("/api/wardrobe/upload", fd);
-      } else {
-        if (!scrapedImage) { toast.error("Scrape a URL first."); setSubmitting(false); return; }
-        item = await apiPost<WardrobeItem>("/api/wardrobe/from-url", {
+    if (tab === "url") {
+      if (!name.trim()) { toast.error("Name is required."); return; }
+      if (!scrapedImage) { toast.error("Scrape a URL first."); return; }
+      setSubmitting(true);
+      try {
+        const item = await apiPost<WardrobeItem>("/api/wardrobe/from-url", {
           name,
           category,
           occasion,
@@ -248,9 +269,77 @@ function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ite
           image_url: scrapedImage,
           source_url: url,
         });
+        toast.success("Item added.");
+        onAdded(item);
+      } catch (e) {
+        toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
+      } finally {
+        setSubmitting(false);
       }
-      toast.success("Item added.");
-      onAdded(item);
+      return;
+    }
+
+    // Upload tab
+    if (!file) { toast.error("Upload a file first."); return; }
+    setPhase("detecting");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await apiUpload<{ image_url: string; detected: DetectedItem[] }>(
+        "/api/wardrobe/detect-items", fd
+      );
+      if (!res.detected || res.detected.length === 0) {
+        toast.error("No clothing items detected. Try a clearer photo.");
+        setPhase("form");
+        return;
+      }
+      if (res.detected.length === 1) {
+        // Single-item path: re-upload via existing /upload using detection to fill blanks
+        const d = res.detected[0];
+        const fd2 = new FormData();
+        fd2.append("file", file);
+        fd2.append("name", name.trim() || d.name);
+        fd2.append("category", category !== "tops" ? category : (d.category || "tops"));
+        fd2.append("occasion", occasion);
+        const finalColor = color.trim() || d.color || "";
+        const finalBrand = brand.trim() || d.brand || "";
+        if (finalColor) fd2.append("color", finalColor);
+        if (finalBrand) fd2.append("brand", finalBrand);
+        const item = await apiUpload<WardrobeItem>("/api/wardrobe/upload", fd2);
+        toast.success("Item added.");
+        onAdded(item);
+        return;
+      }
+      // 2+ detected → review checklist
+      setDetected(res.detected);
+      setDetectedSourceUrl(res.image_url);
+      setPhase("checklist");
+    } catch (e) {
+      toast.error(`Detection failed: ${e instanceof Error ? e.message : "unknown"}`);
+      setPhase("form");
+    }
+  }
+
+  async function confirmMulti(picked: DetectedItem[]) {
+    if (!detectedSourceUrl || picked.length === 0) return;
+    setSubmitting(true);
+    try {
+      const res = await apiPost<{ created: WardrobeItem[]; failed: { name: string; reason: string }[] }>(
+        "/api/wardrobe/add-multi",
+        { source_image_url: detectedSourceUrl, items: picked }
+      );
+      const okCount = res.created?.length || 0;
+      const failCount = res.failed?.length || 0;
+      if (okCount > 0) {
+        toast.success(
+          failCount > 0
+            ? `${okCount} item${okCount === 1 ? "" : "s"} added. ${failCount} failed.`
+            : `${okCount} item${okCount === 1 ? "" : "s"} added.`
+        );
+        onAddedMany(res.created);
+      } else {
+        toast.error("Could not add any items. Try again or upload them individually.");
+      }
     } catch (e) {
       toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
     } finally {
@@ -268,9 +357,31 @@ function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ite
       <motion.div
         initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
         className="surface p-7 w-full"
-        style={{ maxWidth: 520 }}
+        style={{ maxWidth: phase === "checklist" ? 640 : 520 }}
         onClick={(e) => e.stopPropagation()}
       >
+        {phase === "detecting" && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--gold)" }} />
+            <h2 className="font-display text-2xl mb-1">Analyzing your photo...</h2>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Looking for individual clothing items.
+            </p>
+          </div>
+        )}
+
+        {phase === "checklist" && (
+          <DetectedItemsChecklist
+            sourceUrl={detectedSourceUrl!}
+            initial={detected}
+            submitting={submitting}
+            onCancel={() => setPhase("form")}
+            onConfirm={confirmMulti}
+          />
+        )}
+
+        {phase === "form" && (
+          <>
         <h2 className="font-display text-3xl mb-5">Add item</h2>
 
         <div className="flex gap-2 mb-5">
@@ -367,7 +478,125 @@ function AddItemModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ite
             {submitting ? <><Loader2 size={16} className="spin" /> Saving...</> : "Add to wardrobe"}
           </button>
         </div>
+          </>
+        )}
       </motion.div>
     </motion.div>
+  );
+}
+
+function DetectedItemsChecklist({
+  sourceUrl,
+  initial,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  sourceUrl: string;
+  initial: DetectedItem[];
+  submitting: boolean;
+  onCancel: () => void;
+  onConfirm: (picked: DetectedItem[]) => void;
+}) {
+  const [rows, setRows] = useState(initial.map((d) => ({ ...d, checked: true })));
+
+  function update(idx: number, patch: Partial<typeof rows[number]>) {
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+
+  const checkedCount = rows.filter((r) => r.checked).length;
+
+  return (
+    <div>
+      <h2 className="font-display text-3xl mb-1">
+        {initial.length} items detected
+      </h2>
+      <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
+        Review, edit, then add. Each item gets isolated as its own clean product shot (~2 credits each).
+      </p>
+
+      <div className="surface p-3 mb-5 flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={sourceUrl} alt="Source" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6 }} />
+        <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Your source photo. Each item below will be extracted from it on a clean white background.
+        </div>
+      </div>
+
+      <div className="space-y-3 mb-5" style={{ maxHeight: 360, overflowY: "auto" }}>
+        {rows.map((r, i) => (
+          <div
+            key={i}
+            className="surface p-3 flex items-start gap-3"
+            style={{ borderColor: r.checked ? "var(--border-gold)" : "var(--border)", opacity: r.checked ? 1 : 0.55 }}
+          >
+            <button
+              onClick={() => update(i, { checked: !r.checked })}
+              className="w-6 h-6 rounded flex items-center justify-center mt-1 flex-shrink-0"
+              style={{
+                background: r.checked ? "var(--gold)" : "var(--surface2)",
+                border: `1px solid ${r.checked ? "var(--gold)" : "var(--border)"}`,
+                color: r.checked ? "var(--on-gold)" : "var(--text-dim)",
+                cursor: "pointer",
+              }}
+              aria-label={r.checked ? "Uncheck" : "Check"}
+            >
+              {r.checked ? <Check size={14} /> : <X size={14} />}
+            </button>
+
+            <div className="flex-1 grid grid-cols-2 gap-2">
+              <div className="col-span-2">
+                <input
+                  className="input"
+                  value={r.name}
+                  onChange={(e) => update(i, { name: e.target.value })}
+                  placeholder="Item name"
+                  style={{ fontSize: "0.9rem" }}
+                />
+              </div>
+              <select
+                className="input"
+                value={r.category}
+                onChange={(e) => update(i, { category: e.target.value as DetectedItem["category"] })}
+                style={{ fontSize: "0.85rem" }}
+              >
+                {CATEGORIES.filter((c) => c !== "all").map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                className="input"
+                placeholder="Color"
+                value={r.color || ""}
+                onChange={(e) => update(i, { color: e.target.value })}
+                style={{ fontSize: "0.85rem" }}
+              />
+              {r.position && (
+                <div className="col-span-2 text-xs" style={{ color: "var(--text-dim)" }}>
+                  In source: {r.position}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button className="btn-secondary" onClick={onCancel} disabled={submitting}>
+          Back
+        </button>
+        <button
+          className="btn-primary"
+          onClick={() => onConfirm(rows.filter((r) => r.checked).map(({ checked, ...rest }) => rest))}
+          disabled={submitting || checkedCount === 0}
+        >
+          {submitting ? (
+            <><Loader2 size={16} className="spin" /> Adding {checkedCount}...</>
+          ) : (
+            <>Add {checkedCount} item{checkedCount === 1 ? "" : "s"}</>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }

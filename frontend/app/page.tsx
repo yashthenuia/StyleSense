@@ -1,19 +1,22 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Sparkles, Shirt, MessageCircle, ArrowRight, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Shirt, MessageCircle, ArrowRight, Plus, Eye } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { HeroVideo } from "@/components/dashboard/HeroVideo";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet } from "@/lib/api";
+import { TryOnDetailModal } from "@/components/TryOnDetailModal";
 import type { WardrobeItem, TryOnResult } from "@/types";
 
 export default function DashboardPage() {
   const { user, profile } = useAuth();
-  const { avatarSelfieUrl, avatarCharacterId } = useAppStore();
+  const { avatarSelfieUrl } = useAppStore();
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [recent, setRecent] = useState<TryOnResult[]>([]);
+  const [openTryOn, setOpenTryOn] = useState<TryOnResult | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -29,32 +32,42 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow={`Welcome${profile?.full_name ? `, ${profile.full_name}` : ""}`}
-        title="Your editorial closet."
-        subtitle="Try anything on your own avatar in seconds. Save outfits. Ask your stylist."
-        action={
-          <Link href="/studio" className="btn-primary">
-            <Sparkles size={16} /> Open Studio
-          </Link>
-        }
-      />
-
-      <div className="grid grid-cols-3 gap-4 mb-10">
-        {stats.map((s, i) => (
-          <motion.div
-            key={s.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * i }}
-            className="surface px-6 py-5"
-          >
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
-              {s.label}
+      {/* Top row: landscape ramp video on the left, welcome + stats on the right */}
+      <div className="grid grid-cols-12 gap-6 mb-10">
+        <div className="col-span-7">
+          <HeroVideo />
+        </div>
+        <div className="col-span-5 flex flex-col">
+          <div className="mb-5">
+            <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--gold)", letterSpacing: "0.15em" }}>
+              {`Welcome${profile?.full_name ? `, ${profile.full_name}` : ""}`}
             </div>
-            <div className="font-display text-4xl mt-2">{s.value}</div>
-          </motion.div>
-        ))}
+            <h1 className="font-display text-4xl leading-tight mb-3">Your Digital Runway Awaits ✨</h1>
+            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+              Compose. Try on. Slay. AI that actually gets your style.
+            </p>
+            <Link href="/studio" className="btn-primary inline-flex">
+              <Sparkles size={16} /> Open Studio
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mt-auto">
+            {stats.map((s, i) => (
+              <motion.div
+                key={s.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * i }}
+                className="surface px-3 py-3"
+              >
+                <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
+                  {s.label}
+                </div>
+                <div className="font-display text-2xl mt-1">{s.value}</div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-10">
@@ -98,20 +111,51 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-4 gap-4">
           {recent.map((r) => (
-            <div key={r.id} className="surface surface-hover overflow-hidden">
+            <button
+              key={r.id}
+              onClick={() => setOpenTryOn(r)}
+              className="surface surface-hover overflow-hidden group relative text-left"
+              style={{ padding: 0, cursor: "pointer", color: "inherit" }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={r.result_image_url} alt="Try-on" className="w-full aspect-[3/4] object-cover" />
+              <img src={r.event_scene_url || r.result_image_url} alt="Try-on" className="w-full aspect-[3/4] object-cover" />
+              {/* Hover overlay - same pattern as Outfits page */}
+              <div
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition flex items-end justify-center pb-6"
+                style={{
+                  background: "linear-gradient(to top, rgba(8,8,13,0.8) 0%, rgba(8,8,13,0) 50%)",
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  className="flex items-center gap-2 px-4 py-2 rounded-full"
+                  style={{ background: "var(--gold)", color: "var(--on-gold)", fontWeight: 600, fontSize: "0.8rem" }}
+                >
+                  <Eye size={14} /> View details
+                </div>
+              </div>
               <div className="px-4 py-3">
                 <div className="text-xs" style={{ color: "var(--text-dim)" }}>
                   {new Date(r.created_at).toLocaleString()}
                 </div>
+                {r.event_context && (
+                  <div className="text-xs mt-1 truncate" style={{ color: "var(--gold)" }}>
+                    ✦ {r.event_context}
+                  </div>
+                )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
 
-      {!avatarCharacterId && (
+      <AnimatePresence>
+        {openTryOn && (
+          <TryOnDetailModal result={openTryOn} onClose={() => setOpenTryOn(null)} />
+        )}
+      </AnimatePresence>
+
+      {!avatarSelfieUrl && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -122,12 +166,12 @@ export default function DashboardPage() {
           <div className="text-xs uppercase tracking-wider" style={{ color: "var(--gold)" }}>
             Next step
           </div>
-          <h3 className="font-display text-2xl mt-1">Set up your AI avatar</h3>
+          <h3 className="font-display text-2xl mt-1">Add your selfie</h3>
           <p className="mt-2 max-w-xl" style={{ color: "var(--text)" }}>
-            Upload one selfie to unlock the talking avatar stylist and personalized try-ons.
+            Upload one selfie so the Studio can put you in any outfit. Aria, your stylist, is already standing by.
           </p>
           <Link href="/onboarding" className="btn-primary mt-4 inline-flex">
-            Start avatar setup <ArrowRight size={14} />
+            Add a selfie <ArrowRight size={14} />
           </Link>
         </motion.div>
       )}

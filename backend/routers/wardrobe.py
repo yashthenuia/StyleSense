@@ -5,13 +5,25 @@ Garment cleaning:
     URL-based items default to clean='none' (retailer images are usually already clean).
     Both can be overridden via the `clean` query/form parameter.
 """
+import asyncio
+import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from typing import Optional, Literal
-from services import supabase_service
+from services import supabase_service, wardrobe_vision_service
 from services.auth_service import current_user
 from services.image_service import validate_image_bytes
-from services.garment_cleaner import clean_garment_bytes
-from models.schemas import AddWardrobeFromUrl
+from services.garment_cleaner import clean_garment_bytes, clean_with_runway, runway_isolate_item
+from models.schemas import (
+    AddWardrobeFromUrl,
+    ExtractFromImage,
+    DetectedItem,
+    DetectItemsResponse,
+    AddMultiRequest,
+    AddMultiResponse,
+    AddMultiFailure,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 CleanPref = Literal["auto", "runway", "rembg", "none"]
@@ -163,6 +175,156 @@ async def add_from_url(req: AddWardrobeFromUrl, user = Depends(current_user)):
     item["clean_method"] = method_used
     item["original_url"] = original_url if final_url != original_url else None
     return item
+
+
+@router.post("/extract-from-image")
+async def extract_from_image(req: ExtractFromImage, user = Depends(current_user)):
+    """
+    Take any image (e.g. a friend's shared try-on or outfit preview), run the
+    Runway garment cleaner on it to isolate the clothing, and save to wardrobe.
+    Used by the chat "Save to my wardrobe" button.
+    """
+    # Use Runway re-synthesis with full quality (gen4_image) for the cleanest extraction
+    cleaned_url = clean_with_runway(
+        image_url=req.image_url,
+        item_name=req.name,
+        item_category=req.category,
+        model="gen4_image",
+    )
+    if not cleaned_url:
+        raise HTTPException(500, "Could not extract garment. Try again or upload manually.")
+
+    # Re-host the Runway-generated image to our Supabase Storage (so it doesn't expire)
+    try:
+        import httpx
+        with httpx.Client(timeout=30.0, follow_redirects=True) as c:
+            r = c.get(cleaned_url)
+            r.raise_for_status()
+        permanent_url = supabase_service.upload_to_storage(
+            bucket="wardrobe", user_id=user["id"],
+            file_bytes=r.content, filename="extracted.jpg",
+            content_type="image/jpeg",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Could not save extracted image: {e}")
+
+    item = supabase_service.insert_wardrobe_item(
+        user_id=user["id"],
+        name=req.name,
+        category=req.category,
+        image_url=permanent_url,
+        occasion=req.occasion or "casual",
+        source_url=req.image_url,
+        tags=["extracted-from-friend"],
+    )
+    item["clean_method"] = "runway-extract"
+    return item
+
+
+@router.post("/detect-items", response_model=DetectItemsResponse)
+async def detect_items(
+    file: UploadFile = File(...),
+    user = Depends(current_user),
+):
+    """
+    Multi-item detection: upload one photo, get back the rehosted public URL +
+    a list of detected garments (~$0.01, Claude vision, no Runway spend).
+
+    Frontend uses this to decide between the existing single-item flow (1
+    detection) and the new multi-item review checklist (>=2 detections).
+    """
+    content = await file.read()
+    try:
+        validate_image_bytes(content, file.content_type or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    try:
+        image_url = supabase_service.upload_to_storage(
+            bucket="wardrobe",
+            user_id=user["id"],
+            file_bytes=content,
+            filename=file.filename or "multi.jpg",
+            content_type=file.content_type or "image/jpeg",
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+
+    detected_raw = wardrobe_vision_service.detect_items_from_bytes(
+        content, file.content_type or "image/jpeg"
+    )
+    detected = [DetectedItem(**d) for d in detected_raw]
+    return DetectItemsResponse(image_url=image_url, detected=detected)
+
+
+@router.post("/add-multi", response_model=AddMultiResponse)
+async def add_multi(req: AddMultiRequest, user = Depends(current_user)):
+    """
+    Per-item Runway isolation + DB insert. Items run in parallel so total
+    wall-time is one Runway call (~30s) regardless of count. Partial success
+    is fine: failures come back in the `failed` list, successes in `created`.
+
+    Cost: ~2cr per item (gen4_image_turbo).
+    """
+    if not req.items:
+        raise HTTPException(400, "items list is empty")
+
+    async def _process_one(item: DetectedItem):
+        loop = asyncio.get_running_loop()
+        # runway_isolate_item is synchronous (uses the SDK's sync client) - run
+        # in the default executor so all items go in parallel.
+        try:
+            isolated_url = await loop.run_in_executor(
+                None,
+                runway_isolate_item,
+                req.source_image_url,
+                item.name,
+                item.category,
+                item.color,
+                item.position,
+            )
+        except Exception as e:
+            return None, AddMultiFailure(name=item.name, reason=f"Runway isolate raised: {e}")
+
+        if not isolated_url:
+            return None, AddMultiFailure(name=item.name, reason="Runway isolate returned no output")
+
+        # Re-host to Supabase (Runway URLs are short-lived JWTs)
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+                r = await c.get(isolated_url)
+                r.raise_for_status()
+            permanent_url = supabase_service.upload_to_storage(
+                bucket="wardrobe",
+                user_id=user["id"],
+                file_bytes=r.content,
+                filename=f"isolated-{item.name[:20].replace('/', '_')}.jpg",
+                content_type="image/jpeg",
+            )
+        except Exception as e:
+            return None, AddMultiFailure(name=item.name, reason=f"Storage rehost failed: {e}")
+
+        try:
+            row = supabase_service.insert_wardrobe_item(
+                user_id=user["id"],
+                name=item.name,
+                category=item.category,
+                image_url=permanent_url,
+                occasion=item.occasion or "casual",
+                color=item.color,
+                brand=item.brand,
+                source_url=req.source_image_url,
+                tags=["multi-item-detected"],
+            )
+            return row, None
+        except Exception as e:
+            return None, AddMultiFailure(name=item.name, reason=f"DB insert failed: {e}")
+
+    results = await asyncio.gather(*[_process_one(it) for it in req.items])
+    created = [row for row, _ in results if row is not None]
+    failed = [fail for _, fail in results if fail is not None]
+    return AddMultiResponse(created=created, failed=failed)
 
 
 @router.delete("/{item_id}")

@@ -5,27 +5,28 @@
 @tailwind utilities;
 
 :root {
-  /* Backgrounds — layered dark surfaces */
-  --bg:        #08080d;
-  --surface:   #0f0f16;
-  --surface2:  #16161f;
-  --surface3:  #1e1e2a;
+  /* Backgrounds — layered editorial cream surfaces */
+  --bg:        #f7f1ea;
+  --surface:   #ffffff;
+  --surface2:  #f0e9df;
+  --surface3:  #e6dcce;
 
   /* Borders */
-  --border:       rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(255, 255, 255, 0.12);
-  --border-gold:  rgba(201, 168, 76, 0.25);
+  --border:       rgba(42, 34, 26, 0.08);
+  --border-hover: rgba(42, 34, 26, 0.16);
+  --border-gold:  rgba(201, 168, 76, 0.35);
 
   /* Text */
-  --text:       #f0ece4;
-  --text-muted: #7a7a8a;
-  --text-dim:   #4a4a5a;
+  --text:       #2a221a;
+  --text-muted: #7a6a55;
+  --text-dim:   #b3a690;
 
   /* Brand gold */
   --gold:       #c9a84c;
   --gold-light: #e8cc7a;
-  --gold-dim:   rgba(201, 168, 76, 0.10);
-  --gold-glow:  rgba(201, 168, 76, 0.20);
+  --gold-dim:   rgba(201, 168, 76, 0.14);
+  --gold-glow:  rgba(201, 168, 76, 0.28);
+  --on-gold:    #1a1410;  /* legible text/icon color on top of --gold surfaces */
 
   /* Accents */
   --purple: #8b6fe8;
@@ -39,7 +40,7 @@
   --radius:    16px;
   --radius-lg: 24px;
 
-  --sidebar-width: 248px;
+  --sidebar-width: 64px;
 }
 
 * { box-sizing: border-box; }
@@ -79,7 +80,7 @@ html, body {
 
 .btn-primary {
   background: var(--gold);
-  color: #08080d;
+  color: #1a1410;
   font-weight: 600;
   border-radius: var(--radius-sm);
   padding: 0.75rem 1.5rem;

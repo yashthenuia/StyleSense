@@ -11,6 +11,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast } from "@/components/ui/Toast";
+import { TryOnDetailModal } from "@/components/TryOnDetailModal";
+import { OutfitDetailModal } from "@/components/OutfitDetailModal";
+import type { TryOnResult, Outfit } from "@/types";
 
 interface ProfileMin {
   id: string;
@@ -179,7 +182,7 @@ function ThreadCard({ thread, active, onClick }: { thread: ThreadRow; active: bo
         {thread.unread > 0 && (
           <span
             className="text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center"
-            style={{ background: "var(--gold)", color: "var(--bg)" }}
+            style={{ background: "var(--gold)", color: "var(--on-gold)" }}
           >
             {thread.unread}
           </span>
@@ -197,6 +200,9 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [openTryOn, setOpenTryOn] = useState<TryOnResult | null>(null);
+  const [openOutfit, setOpenOutfit] = useState<Outfit | null>(null);
+  const [openImage, setOpenImage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchThread = useCallback(async () => {
@@ -269,10 +275,42 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
       <div ref={scrollRef} className="flex-1 overflow-auto p-5 space-y-3">
         <AnimatePresence>
           {messages.map((m) => (
-            <Bubble key={m.id} m={m} mine={m.sender_id === user?.id} />
+            <Bubble
+              key={m.id}
+              m={m}
+              mine={m.sender_id === user?.id}
+              onOpenTryOn={(t) => setOpenTryOn(t as TryOnResult)}
+              onOpenOutfit={(o) => setOpenOutfit(o as Outfit)}
+              onOpenImage={(url) => setOpenImage(url)}
+            />
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Detail modals for shared cards */}
+      <AnimatePresence>
+        {openTryOn && (
+          <TryOnDetailModal
+            result={openTryOn}
+            onClose={() => setOpenTryOn(null)}
+            sharedBy={other ? { name: other.full_name, email: other.email } : null}
+          />
+        )}
+        {openOutfit && (
+          <OutfitDetailModal outfit={openOutfit} onClose={() => setOpenOutfit(null)} />
+        )}
+        {openImage && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 flex items-center justify-center px-4 py-8"
+            style={{ background: "rgba(8,8,13,0.95)", zIndex: 100 }}
+            onClick={() => setOpenImage(null)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={openImage} alt="Shared" style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain" }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Composer */}
       <div className="p-4" style={{ borderTop: "1px solid var(--border)" }}>
@@ -305,7 +343,12 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
   );
 }
 
-function Bubble({ m, mine }: { m: MessageRow; mine: boolean }) {
+function Bubble({ m, mine, onOpenTryOn, onOpenOutfit, onOpenImage }: {
+  m: MessageRow; mine: boolean;
+  onOpenTryOn: (t: NonNullable<MessageRow["tryon"]>) => void;
+  onOpenOutfit: (o: NonNullable<MessageRow["outfit"]>) => void;
+  onOpenImage: (url: string) => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -319,9 +362,13 @@ function Bubble({ m, mine }: { m: MessageRow; mine: boolean }) {
           color: "var(--text)",
         }}
       >
-        {/* Attached outfit */}
+        {/* Attached outfit - click to open */}
         {m.outfit && (
-          <div className="mb-2 surface overflow-hidden" style={{ maxWidth: 220 }}>
+          <button
+            onClick={() => onOpenOutfit(m.outfit!)}
+            className="mb-2 surface overflow-hidden block group transition"
+            style={{ maxWidth: 220, padding: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
+          >
             {m.outfit.preview_image_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={m.outfit.preview_image_url} alt={m.outfit.name} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover" }} />
@@ -329,14 +376,19 @@ function Bubble({ m, mine }: { m: MessageRow; mine: boolean }) {
             <div className="px-3 py-2 flex items-center gap-2 text-xs">
               <Layers size={12} style={{ color: "var(--gold)" }} />
               <span style={{ color: "var(--text)" }}>{m.outfit.name}</span>
+              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--gold)" }}>View →</span>
             </div>
-          </div>
+          </button>
         )}
-        {/* Attached try-on */}
+        {/* Attached try-on - click to open */}
         {m.tryon && (
-          <div className="mb-2 surface overflow-hidden" style={{ maxWidth: 220 }}>
+          <button
+            onClick={() => onOpenTryOn(m.tryon!)}
+            className="mb-2 surface overflow-hidden block group transition"
+            style={{ maxWidth: 220, padding: 0, cursor: "pointer", textAlign: "left", color: "inherit" }}
+          >
             {m.tryon.result_video_url ? (
-              <video src={m.tryon.result_video_url} controls style={{ width: "100%", aspectRatio: "3/4" }} />
+              <video src={m.tryon.result_video_url} style={{ width: "100%", aspectRatio: "3/4", pointerEvents: "none" }} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={m.tryon.result_image_url} alt="Try-on" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover" }} />
@@ -344,13 +396,20 @@ function Bubble({ m, mine }: { m: MessageRow; mine: boolean }) {
             <div className="px-3 py-2 flex items-center gap-2 text-xs">
               <Sparkles size={12} style={{ color: "var(--gold)" }} />
               <span style={{ color: "var(--text)" }}>Try-on</span>
+              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--gold)" }}>View →</span>
             </div>
-          </div>
+          </button>
         )}
-        {/* Direct image attachment */}
+        {/* Direct image attachment - click to open lightbox */}
         {m.shared_image_url && !m.tryon && !m.outfit && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={m.shared_image_url} alt="Shared" className="mb-2 rounded-md" style={{ maxWidth: 220 }} />
+          <img
+            src={m.shared_image_url}
+            alt="Shared"
+            className="mb-2 rounded-md cursor-pointer"
+            style={{ maxWidth: 220 }}
+            onClick={() => onOpenImage(m.shared_image_url!)}
+          />
         )}
         {m.shared_caption && <div className="text-xs italic mb-1" style={{ color: "var(--text-muted)" }}>{m.shared_caption}</div>}
         {m.content && <div className="text-sm whitespace-pre-wrap">{m.content}</div>}

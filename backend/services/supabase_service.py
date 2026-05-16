@@ -39,8 +39,8 @@ def upload_to_storage(
     ext = filename.split(".")[-1].lower() if "." in filename else "jpg"
     if ext == "jpeg":
         ext = "jpg"
-    if ext not in ("jpg", "png", "webp"):
-        raise ValueError(f"Unsupported file extension: {ext}. Use jpg, png, or webp.")
+    if ext not in ("jpg", "png", "webp", "wav", "mp3", "m4a", "ogg", "mp4", "webm", "mov"):
+        raise ValueError(f"Unsupported file extension: {ext}. Use jpg, png, webp, wav, mp3, m4a, ogg, mp4, webm, or mov.")
 
     storage_path = f"{user_id}/{uuid.uuid4()}.{ext}"
 
@@ -197,6 +197,15 @@ def get_recent_tryons(user_id: str, limit: int = 12) -> list:
 
 
 # ───────────────────────────── OUTFITS ───────────────────────────── #
+
+def get_outfit(outfit_id: str) -> Optional[dict]:
+    res = supabase.table("outfits").select("*").eq("id", outfit_id).execute()
+    return res.data[0] if res.data else None
+
+
+def delete_outfit(outfit_id: str) -> None:
+    supabase.table("outfits").delete().eq("id", outfit_id).execute()
+
 
 def save_outfit(user_id: str, name: str, item_ids: list, occasion: Optional[str], preview_image_url: Optional[str], notes: Optional[str]) -> dict:
     res = supabase.table("outfits").insert({

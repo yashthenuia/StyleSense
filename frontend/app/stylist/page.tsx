@@ -12,19 +12,24 @@ import type { ChatMessage, WardrobeItem } from "@/types";
 import { AvatarWidget } from "@/components/stylist/AvatarWidget";
 
 const SUGGESTION_PROMPTS = [
-  "What should I wear to a casual Friday at the office?",
-  "Pick me something for a dinner date.",
-  "I have a job interview tomorrow — what should I wear?",
+  "Dinner date that says 'I have taste'",
+  "Main character energy for brunch",
+  "Boardroom but make it fashion",
   "What goes well with my white t-shirt?",
-  "Suggest a beach-day outfit from what I own.",
+  "Beach-day outfit from what I own",
 ];
 
 export default function StylistPage() {
-  const { user } = useAuth();
-  const { avatarCharacterId } = useAppStore();
+  const { user, profile } = useAuth();
+  const firstName = profile?.full_name?.split(" ")[0];
   const [tab, setTab] = useState<"chat" | "voice">("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hi! I'm your StyleAI stylist. I can see your full wardrobe — ask me what to wear and I'll pick specific items." },
+    {
+      role: "assistant",
+      content: firstName
+        ? `Hey ${firstName}, I've studied every piece in your closet. What vibe are we creating today?`
+        : "Hey — I've studied every piece in your closet. What vibe are we creating today?",
+    },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,7 +88,6 @@ export default function StylistPage() {
           onClick={() => setTab("voice")}
         >
           <Mic size={12} style={{ marginRight: 6 }} /> Voice avatar
-          {!avatarCharacterId && <span style={{ color: "var(--text-dim)", marginLeft: 6 }}>(needs setup)</span>}
         </button>
       </div>
 
@@ -144,8 +148,43 @@ export default function StylistPage() {
               </div>
             </div>
           ) : (
-            <div className="surface" style={{ height: 620 }}>
-              <AvatarWidget />
+            <div className="surface flex flex-col" style={{ height: 620 }}>
+              <div className="flex-1 overflow-hidden">
+                <AvatarWidget />
+              </div>
+              {/* Type instead of speaking - auto-switches to text tab + sends */}
+              <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+                  Or type your question
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    className="input"
+                    placeholder="Type and we'll switch to text mode..."
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && input.trim()) {
+                        const text = input;
+                        setTab("chat");
+                        setTimeout(() => send(text), 50);
+                      }
+                    }}
+                  />
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      if (!input.trim()) return;
+                      const text = input;
+                      setTab("chat");
+                      setTimeout(() => send(text), 50);
+                    }}
+                    disabled={!input.trim()}
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -158,7 +197,14 @@ export default function StylistPage() {
             {SUGGESTION_PROMPTS.map((p) => (
               <button
                 key={p}
-                onClick={() => send(p)}
+                onClick={() => {
+                  if (tab === "voice") {
+                    setTab("chat");
+                    setTimeout(() => send(p), 50);
+                  } else {
+                    send(p);
+                  }
+                }}
                 disabled={loading}
                 className="surface surface-hover w-full text-left text-sm px-4 py-3"
                 style={{ display: "block" }}

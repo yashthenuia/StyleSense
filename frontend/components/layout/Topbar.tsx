@@ -1,15 +1,32 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { LogOut, Copy, Check } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LogOut, Copy, Check, Loader2, Sparkles, Users, MessagesSquare, User } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "@/components/ui/Toast";
+import { useTasks, selectRunningCount } from "@/store/tasks";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
+
+const PRIMARY_NAV = [
+  { href: "/",         label: "Dashboard" },
+  { href: "/wardrobe", label: "Wardrobe" },
+  { href: "/studio",   label: "Studio" },
+  { href: "/outfits",  label: "Outfits" },
+  { href: "/stylist",  label: "Stylist" },
+];
 
 export function Topbar() {
   const { user, profile, signOut } = useAuth();
+  const pathname = usePathname();
+  const supabase = getSupabaseBrowser();
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pendingFriends, setPendingFriends] = useState(0);
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const runningCount = useTasks(selectRunningCount);
 
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -24,6 +41,36 @@ export function Topbar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+
+    async function load() {
+      const [friendsRes, msgsRes] = await Promise.all([
+        supabase.from("friendships").select("id", { count: "exact", head: true })
+          .eq("addressee_id", user!.id).eq("status", "pending"),
+        supabase.from("messages").select("id", { count: "exact", head: true })
+          .eq("recipient_id", user!.id).is("read_at", null),
+      ]);
+      if (!mounted) return;
+      setPendingFriends(friendsRes.count ?? 0);
+      setUnreadMsgs(msgsRes.count ?? 0);
+    }
+    load();
+
+    const channel = supabase
+      .channel(`topbar:${user.id}`)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${user.id}` },
+        () => setUnreadMsgs((n) => n + 1))
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` },
+        () => setPendingFriends((n) => n + 1))
+      .subscribe();
+
+    return () => { mounted = false; supabase.removeChannel(channel); };
+  }, [user, supabase]);
+
   function copyShareCode() {
     if (!profile?.share_code) return;
     navigator.clipboard.writeText(profile.share_code);
@@ -36,70 +83,174 @@ export function Topbar() {
 
   return (
     <header
-      className="flex items-center justify-between px-8 py-4 relative"
+      className="flex items-center px-8 py-4 relative gap-6"
       style={{ borderBottom: "1px solid var(--border)" }}
     >
-      <div className="flex items-center gap-3 text-sm" style={{ color: "var(--text-muted)" }}>
-        <span style={{
-          width: 6, height: 6, borderRadius: 999,
-          background: healthy ? "var(--green)" : healthy === false ? "var(--red)" : "var(--text-dim)",
-        }} />
-        <span>{healthy ? "Backend connected" : healthy === false ? "Backend offline" : "Connecting..."}</span>
+      {/* LEFT — Brand + health/tasks */}
+      <div className="flex items-center gap-4 min-w-0">
+        <Link href="/" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "1.6rem", textDecoration: "none" }}>
+          StyleAI
+        </Link>
+        <div className="hidden md:flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: 999,
+            background: healthy ? "var(--green)" : healthy === false ? "var(--red)" : "var(--text-dim)",
+          }} />
+          <span className="text-xs">{healthy ? "Connected" : healthy === false ? "Offline" : "..."}</span>
+        </div>
+        {runningCount > 0 && (
+          <Link
+            href="/studio"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+            style={{
+              background: "var(--gold-dim)",
+              border: "1px solid var(--border-gold)",
+              color: "var(--gold)",
+              textDecoration: "none",
+              fontSize: "0.8rem",
+            }}
+            title="Click to view in Studio"
+          >
+            <Loader2 size={12} className="spin" />
+            <span>{runningCount} {runningCount === 1 ? "task" : "tasks"} running</span>
+            <Sparkles size={11} />
+          </Link>
+        )}
       </div>
 
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-3 cursor-pointer"
-          style={{ background: "none", border: "none", color: "var(--text)" }}
-        >
-          <div className="text-right">
-            <div className="text-sm font-medium">{profile?.full_name || user?.email?.split("@")[0]}</div>
-            <div className="text-xs" style={{ color: "var(--text-dim)" }}>{user?.email}</div>
-          </div>
-          <div
-            className="rounded-full flex items-center justify-center font-semibold text-sm"
-            style={{
-              width: 36, height: 36,
-              background: "var(--gold-dim)",
-              color: "var(--gold)",
-              border: "1px solid var(--border-gold)",
-            }}
-          >
-            {initial}
-          </div>
-        </button>
+      {/* CENTER — Primary nav */}
+      <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
+        {PRIMARY_NAV.map(({ href, label }) => {
+          const active = href === "/" ? pathname === "/" : pathname?.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className="relative px-3 py-2 text-sm transition-colors"
+              style={{
+                color: active ? "var(--gold)" : "var(--text-muted)",
+                textDecoration: "none",
+                fontWeight: active ? 600 : 500,
+              }}
+            >
+              {label}
+              {active && (
+                <span
+                  className="absolute left-2 right-2"
+                  style={{ bottom: -1, height: 2, background: "var(--gold)", borderRadius: 2 }}
+                />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
-        {open && (
-          <div
-            className="absolute right-0 top-full mt-2 surface p-2 min-w-[260px]"
-            style={{ zIndex: 50 }}
+      {/* RIGHT — Friends, Chat, Avatar */}
+      <div className="ml-auto flex items-center gap-1">
+        <Link
+          href="/friends"
+          title="Friends"
+          aria-label="Friends"
+          className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
+          style={{
+            color: pathname?.startsWith("/friends") ? "var(--gold)" : "var(--text-muted)",
+            background: pathname?.startsWith("/friends") ? "var(--gold-dim)" : "transparent",
+          }}
+        >
+          <Users size={18} strokeWidth={1.6} />
+          {pendingFriends > 0 && (
+            <span
+              className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
+              style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
+            >
+              {pendingFriends}
+            </span>
+          )}
+        </Link>
+
+        <Link
+          href="/chat"
+          title="Chat"
+          aria-label="Chat"
+          className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
+          style={{
+            color: pathname?.startsWith("/chat") ? "var(--gold)" : "var(--text-muted)",
+            background: pathname?.startsWith("/chat") ? "var(--gold-dim)" : "transparent",
+          }}
+        >
+          <MessagesSquare size={18} strokeWidth={1.6} />
+          {unreadMsgs > 0 && (
+            <span
+              className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
+              style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
+            >
+              {unreadMsgs}
+            </span>
+          )}
+        </Link>
+
+        <div ref={ref} className="relative ml-2">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-3 cursor-pointer"
+            style={{ background: "none", border: "none", color: "var(--text)" }}
           >
-            {profile?.share_code && (
+            <div className="text-right hidden lg:block">
+              <div className="text-sm font-medium">{profile?.full_name || user?.email?.split("@")[0]}</div>
+              <div className="text-xs" style={{ color: "var(--text-dim)" }}>{user?.email}</div>
+            </div>
+            <div
+              className="rounded-full flex items-center justify-center font-semibold text-sm"
+              style={{
+                width: 36, height: 36,
+                background: "var(--gold-dim)",
+                color: "var(--gold)",
+                border: "1px solid var(--border-gold)",
+              }}
+            >
+              {initial}
+            </div>
+          </button>
+
+          {open && (
+            <div
+              className="absolute right-0 top-full mt-2 surface p-2 min-w-[260px]"
+              style={{ zIndex: 50 }}
+            >
+              {profile?.share_code && (
+                <button
+                  onClick={copyShareCode}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-surface3 text-left"
+                  style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
+                >
+                  <div>
+                    <div className="text-xs" style={{ color: "var(--text-muted)" }}>Your share code</div>
+                    <div className="font-mono text-sm" style={{ color: "var(--gold)", letterSpacing: "0.1em" }}>
+                      {profile.share_code}
+                    </div>
+                  </div>
+                  {copied ? <Check size={14} color="var(--green)" /> : <Copy size={14} />}
+                </button>
+              )}
+              <div style={{ height: 1, background: "var(--border)", margin: "6px 0" }} />
+              <Link
+                href="/onboarding"
+                onClick={() => setOpen(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+                style={{ color: "var(--text)", textDecoration: "none", borderRadius: 8 }}
+              >
+                <User size={14} /> Avatar Setup
+              </Link>
               <button
-                onClick={copyShareCode}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-surface3 text-left"
+                onClick={signOut}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm"
                 style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
               >
-                <div>
-                  <div className="text-xs" style={{ color: "var(--text-muted)" }}>Your share code</div>
-                  <div className="font-mono text-sm" style={{ color: "var(--gold)", letterSpacing: "0.1em" }}>
-                    {profile.share_code}
-                  </div>
-                </div>
-                {copied ? <Check size={14} color="var(--green)" /> : <Copy size={14} />}
+                <LogOut size={14} /> Sign out
               </button>
-            )}
-            <div style={{ height: 1, background: "var(--border)", margin: "6px 0" }} />
-            <button
-              onClick={signOut}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
-              style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
-            >
-              <LogOut size={14} /> Sign out
-            </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

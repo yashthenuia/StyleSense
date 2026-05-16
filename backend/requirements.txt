@@ -9,5 +9,5 @@ Pillow==11.0.0
 python-dotenv==1.0.1
 anthropic==0.42.0
 pydantic==2.9.2
-rembg==2.0.59
-onnxruntime==1.20.1
+# rembg==2.0.59          # skipped: no wheel for Python 3.13 (lazy-imported fallback)
+# onnxruntime==1.20.1    # skipped: only required by rembg

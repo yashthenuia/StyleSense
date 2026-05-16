@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@runwayml/avatars-react/styles.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Toaster } from "@/components/ui/Toast";
@@ -7,8 +8,8 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "StyleAI · Personal Wardrobe + AI Stylist",
-  description: "Try on outfits with your own AI avatar. Built on the Runway API.",
+  title: "StyleAI — Your Digital Runway",
+  description: "AI-powered wardrobe and virtual try-on. Compose looks, see them on your avatar, animate them as video, and ask an AI stylist that actually knows your closet.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

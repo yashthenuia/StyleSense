@@ -1,17 +1,85 @@
 """Avatar/character setup: selfie upload + Runway character creation + knowledge sync."""
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+import os
+import logging
+import httpx
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from typing import Optional
 
 from models.schemas import CreateCharacterRequest, SyncKnowledgeRequest
-from services import supabase_service, character_service
+from services import supabase_service, character_service, avatar_pose_service
 from services.auth_service import current_user
 from services.image_service import validate_image_bytes
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _bg_generate_stylized(user_id: str, selfie_url: str):
+    """
+    Background helper - swallows errors so a Runway hiccup doesn't crash anything.
+    Two-stage pipeline, each step idempotent against its source:
+      1. Generate the still stylized portrait (~5cr, ~30s) - skipped if a
+         ready still already exists for this exact selfie_url
+      2. Chain the ramp-walking video on the still (~60-100cr, ~60-90s) -
+         skipped if a ready video already exists for this exact stylized URL
+    The idempotence guards make the /regenerate-stylized backfill button
+    cheap for users who already have the still but not the video.
+    """
+    row = supabase_service.get_user(user_id) or {}
+
+    # Stage 1: still ----------------------------------------------------------
+    still_already_good = (
+        row.get("stylized_avatar_source_selfie") == selfie_url
+        and row.get("stylized_avatar_status") == "ready"
+        and row.get("stylized_avatar_url")
+    )
+    if still_already_good:
+        stylized_url = row["stylized_avatar_url"]
+        logger.info(f"Stylized still already cached for {user_id}; skipping to video step")
+    else:
+        try:
+            result = await avatar_pose_service.generate_stylized_avatar(user_id, selfie_url)
+            stylized_url = result.get("url")
+            logger.info(f"Stylized avatar ready for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Stylized avatar gen failed for {user_id}: {e}")
+            return
+
+    if not stylized_url:
+        return
+
+    # Stage 2: video ----------------------------------------------------------
+    # Re-read row in case stage 1 updated it.
+    row = supabase_service.get_user(user_id) or {}
+    video_already_good = (
+        row.get("stylized_avatar_video_source") == stylized_url
+        and row.get("stylized_avatar_video_status") == "ready"
+        and row.get("stylized_avatar_video_url")
+    )
+    if video_already_good:
+        logger.info(f"Stylized video already cached for {user_id}; nothing to do")
+        return
+
+    try:
+        await avatar_pose_service.generate_stylized_video(user_id, stylized_url)
+        logger.info(f"Stylized ramp video ready for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Stylized video gen failed for {user_id}: {e}")
 
 
 @router.post("/upload-selfie")
-async def upload_selfie(file: UploadFile = File(...), user = Depends(current_user)):
+async def upload_selfie(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user = Depends(current_user),
+):
+    """
+    Upload a new selfie. Appends to selfie_urls array. Sets as primary
+    (avatar_selfie_url) only if user has no primary yet OR fewer than 2 selfies.
+
+    Side effect: if this becomes the primary selfie, kick off async generation of
+    the stylized editorial-3D full-body avatar (used as the Studio idle hero).
+    """
     content = await file.read()
     try:
         validate_image_bytes(content, file.content_type or "")
@@ -25,8 +93,70 @@ async def upload_selfie(file: UploadFile = File(...), user = Depends(current_use
         filename=file.filename or "selfie.jpg",
         content_type=file.content_type or "image/jpeg",
     )
-    supabase_service.upsert_user(user["id"], avatar_selfie_url=public_url, email=user["email"])
-    return {"selfie_url": public_url}
+
+    # Append to selfie_urls array
+    current = supabase_service.get_user(user["id"]) or {}
+    selfies = list(current.get("selfie_urls") or [])
+    if public_url not in selfies:
+        selfies.append(public_url)
+    selfies = selfies[-3:]  # cap at 3 most recent
+
+    becomes_primary = not current.get("avatar_selfie_url") or len(selfies) == 1
+    fields = {"selfie_urls": selfies, "email": user["email"]}
+    if becomes_primary:
+        fields["avatar_selfie_url"] = public_url
+    try:
+        supabase_service.upsert_user(user["id"], **fields)
+    except Exception:
+        # Fall back without selfie_urls if column doesn't exist yet
+        supabase_service.upsert_user(
+            user["id"], avatar_selfie_url=public_url, email=user["email"]
+        )
+
+    # Auto-generate stylized hero avatar in the background when the primary
+    # selfie changes (so the Studio shows it as soon as the user lands there).
+    if becomes_primary:
+        background_tasks.add_task(_bg_generate_stylized, user["id"], public_url)
+
+    return {"selfie_url": public_url, "selfie_urls": selfies}
+
+
+@router.get("/selfies")
+async def list_selfies(user = Depends(current_user)):
+    row = supabase_service.get_user(user["id"]) or {}
+    primary = row.get("avatar_selfie_url")
+    urls = list(row.get("selfie_urls") or [])
+    if primary and primary not in urls:
+        urls.insert(0, primary)
+    return {"selfie_urls": urls, "primary_url": primary}
+
+
+@router.post("/set-primary-selfie")
+async def set_primary_selfie(
+    background_tasks: BackgroundTasks,
+    url: str = Form(...),
+    user = Depends(current_user),
+):
+    row = supabase_service.get_user(user["id"]) or {}
+    selfies = list(row.get("selfie_urls") or [])
+    if url not in selfies:
+        raise HTTPException(404, "That selfie isn't in your list. Upload it first.")
+    supabase_service.upsert_user(user["id"], avatar_selfie_url=url, email=user["email"])
+    # Regenerate stylized hero only if the primary actually changed
+    if row.get("stylized_avatar_source_selfie") != url:
+        background_tasks.add_task(_bg_generate_stylized, user["id"], url)
+    return {"primary_url": url, "needs_avatar_recreate": bool(row.get("avatar_character_id"))}
+
+
+@router.delete("/selfie")
+async def delete_selfie(url: str, user = Depends(current_user)):
+    row = supabase_service.get_user(user["id"]) or {}
+    selfies = [u for u in (row.get("selfie_urls") or []) if u != url]
+    fields = {"selfie_urls": selfies, "email": user["email"]}
+    if row.get("avatar_selfie_url") == url:
+        fields["avatar_selfie_url"] = selfies[0] if selfies else None
+    supabase_service.upsert_user(user["id"], **fields)
+    return {"selfie_urls": selfies, "primary_url": fields.get("avatar_selfie_url")}
 
 
 @router.post("/create-character")
@@ -37,7 +167,7 @@ async def create_character(req: CreateCharacterRequest, user = Depends(current_u
             selfie_url=req.selfie_url,
             name=req.name,
             instructions=instructions,
-            voice=req.voice,
+            voice_id=req.voice,  # None falls back to RUNWAY_DEFAULT_VOICE_ID env
         )
     except RuntimeError as e:
         raise HTTPException(
@@ -56,6 +186,49 @@ async def create_character(req: CreateCharacterRequest, user = Depends(current_u
     character_id = result.get("id") or result.get("avatarId")
     supabase_service.upsert_user(user["id"], avatar_character_id=character_id, email=user["email"])
     return {"character_id": character_id, "raw": result}
+
+
+@router.post("/recreate-character")
+async def recreate_character(req: CreateCharacterRequest, user = Depends(current_user)):
+    """
+    Force-recreate the avatar with the given selfie. Used when the user
+    swaps their primary selfie or wants a fresh character.
+    Same body as /create-character. Replaces user's avatar_character_id.
+    """
+    instructions = character_service.build_stylist_instructions(req.name)
+    try:
+        result = await character_service.create_character(
+            selfie_url=req.selfie_url, name=req.name,
+            instructions=instructions, voice_id=req.voice,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    character_id = result.get("id") or result.get("avatarId")
+    supabase_service.upsert_user(
+        user["id"], avatar_character_id=character_id,
+        avatar_selfie_url=req.selfie_url, email=user["email"],
+    )
+    return {"character_id": character_id, "raw": result}
+
+
+@router.post("/refresh-voice")
+async def refresh_voice(user = Depends(current_user)):
+    """
+    PATCH the user's existing avatar to use the latest RUNWAY_DEFAULT_VOICE_ID.
+    Useful when the default voice is updated server-side and the user wants
+    their already-created avatar to switch to it without full recreation.
+    """
+    row = supabase_service.get_user(user["id"]) or {}
+    char_id = row.get("avatar_character_id")
+    if not char_id:
+        raise HTTPException(400, "No avatar character to update. Create one first.")
+    try:
+        result = await character_service.update_character_voice(char_id)
+        new_voice = (result.get("voice") or {}).get("id")
+        return {"character_id": char_id, "voice_id": new_voice, "ok": True}
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
 
 
 @router.post("/save-character-id")
@@ -103,7 +276,12 @@ async def sync_wardrobe_knowledge(_req: SyncKnowledgeRequest = None, user = Depe
         await character_service.attach_document_to_character(
             user_row["avatar_character_id"], doc_id
         )
-        supabase_service.upsert_user(user["id"], avatar_document_id=doc_id, email=user["email"])
+        try:
+            supabase_service.upsert_user(user["id"], avatar_document_id=doc_id, email=user["email"])
+        except Exception as e:
+            # Optional local bookkeeping - don't fail the sync if the column is missing
+            import logging
+            logging.getLogger(__name__).warning(f"Could not save avatar_document_id locally: {e}")
         return {
             "wardrobe_text": knowledge_text,
             "item_count": len(items),
@@ -119,6 +297,166 @@ async def sync_wardrobe_knowledge(_req: SyncKnowledgeRequest = None, user = Depe
         }
 
 
+@router.get("/stylized")
+async def get_stylized(user = Depends(current_user)):
+    """
+    Read the user's stylized full-body editorial-3D avatar (hybrid-aesthetic
+    sibling of the photoreal selfie). Returns:
+      { url, status, source_selfie }
+    where status is 'idle' | 'generating' | 'ready' | 'failed' | 'no_selfie'.
+    """
+    row = supabase_service.get_user(user["id"]) or {}
+    if not row.get("avatar_selfie_url"):
+        return {"url": None, "status": "no_selfie", "source_selfie": None}
+    return {
+        "url": row.get("stylized_avatar_url"),
+        "status": row.get("stylized_avatar_status") or "idle",
+        "source_selfie": row.get("stylized_avatar_source_selfie"),
+    }
+
+
+@router.get("/stylized-video")
+async def get_stylized_video(user = Depends(current_user)):
+    """
+    Read the user's stylized ramp-walking video. Returns:
+      { url, status, source }
+    where status is 'idle' | 'generating' | 'ready' | 'failed' | 'no_selfie'.
+    """
+    row = supabase_service.get_user(user["id"]) or {}
+    if not row.get("avatar_selfie_url"):
+        return {"url": None, "status": "no_selfie", "source": None}
+    return {
+        "url": row.get("stylized_avatar_video_url"),
+        "status": row.get("stylized_avatar_video_status") or "idle",
+        "source": row.get("stylized_avatar_video_source"),
+    }
+
+
+@router.post("/regenerate-stylized")
+async def regenerate_stylized(
+    background_tasks: BackgroundTasks,
+    user = Depends(current_user),
+):
+    """Manual trigger - re-runs stylized avatar gen against the current primary selfie."""
+    row = supabase_service.get_user(user["id"]) or {}
+    selfie = row.get("avatar_selfie_url")
+    if not selfie:
+        raise HTTPException(400, "No primary selfie to stylize. Upload one first.")
+    background_tasks.add_task(_bg_generate_stylized, user["id"], selfie)
+    return {"queued": True, "source_selfie": selfie}
+
+
+@router.post("/sync-stylist-kb")
+async def sync_stylist_kb(user = Depends(current_user)):
+    """
+    Sync the calling user's wardrobe to the SHARED admin stylist (Aria) by
+    PATCHing her `personality` with the user's items embedded + strict
+    format rules. Personality is the only field Runway's voice agent is
+    documented to read for custom avatars, so this is the load-bearing path.
+
+    Also attempts to attach a knowledge document (best-effort, may help if
+    Runway ever starts consuming document_ids for realtime).
+
+    Awaits both calls before returning. The frontend MUST await this before
+    starting a realtime session.
+    """
+    char_id = os.getenv("STYLIST_CHARACTER_ID")
+    if not char_id:
+        raise HTTPException(503, "STYLIST_CHARACTER_ID not configured.")
+
+    user_row = supabase_service.get_user(user["id"]) or {}
+    items = supabase_service.get_wardrobe_items(user["id"])
+
+    persona = character_service.build_dynamic_persona(
+        user_name=user_row.get("full_name") or "the user",
+        items=items,
+    )
+
+    # Load-bearing: PATCH personality and AWAIT. If this fails, fail the whole
+    # call so the frontend knows not to start the session with a stale persona.
+    try:
+        await character_service.update_character_personality(char_id, persona)
+    except RuntimeError as e:
+        raise HTTPException(502, f"Could not PATCH stylist personality: {e}")
+
+    # Best-effort: also attach a knowledge document. If it fails the persona
+    # still has the wardrobe inline, so we don't surface this error.
+    doc_id = None
+    if items:
+        try:
+            knowledge_text = character_service.build_wardrobe_knowledge_text(
+                items, user_name=user_row.get("full_name") or "the user"
+            )
+            doc = await character_service.upload_knowledge_document(
+                content=knowledge_text, name=f"wardrobe-{user['id']}.txt"
+            )
+            doc_id = doc.get("id")
+            await character_service.attach_document_to_character(char_id, doc_id)
+        except Exception as e:
+            logger.info(f"Doc attach skipped (best-effort): {e}")
+
+    return {
+        "synced": True,
+        "item_count": len(items),
+        "character_id": char_id,
+        "personality_bytes": len(persona),
+        "document_id": doc_id,
+    }
+
+
+@router.get("/stylist")
+async def get_stylist():
+    """
+    Returns the configured shared admin stylist character.
+    Every user's voice avatar session uses this character.
+
+    No auth required (the character is a brand asset, same for everyone).
+    Set STYLIST_CHARACTER_ID in backend/.env to wire it up. Run
+    `python -m scripts.setup_admin_stylist` once to create it.
+    """
+    char_id = os.getenv("STYLIST_CHARACTER_ID")
+    if not char_id:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Admin stylist not configured.",
+                "fix": "Run `python -m scripts.setup_admin_stylist` then add STYLIST_CHARACTER_ID to backend/.env and frontend/.env.local.",
+            },
+        )
+
+    api_key = os.getenv("RUNWAY_API_KEY") or os.getenv("RUNWAYML_API_SECRET")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"https://api.dev.runwayml.com/v1/avatars/{char_id}",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "X-Runway-Version": "2024-11-06",
+                },
+            )
+        if r.status_code >= 400:
+            raise HTTPException(
+                502,
+                f"Could not fetch stylist from Runway ({r.status_code}). "
+                f"Is STYLIST_CHARACTER_ID still valid?"
+            )
+        data = r.json()
+        return {
+            "character_id": char_id,
+            "name": data.get("name"),
+            "image_url": data.get("processedImageUri") or data.get("referenceImageUri"),
+            "status": data.get("status", "UNKNOWN"),
+            "ready": data.get("status") == "READY",
+            "voice_name": (data.get("voice") or {}).get("name"),
+            "voice_id": (data.get("voice") or {}).get("id"),
+            "hero_video_url": os.getenv("STYLIST_HERO_VIDEO_URL"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Stylist fetch failed: {e}")
+
+
 @router.get("/me")
 async def get_avatar_state(user = Depends(current_user)):
     """Return cached avatar fields for the current user."""
@@ -127,3 +465,43 @@ async def get_avatar_state(user = Depends(current_user)):
         "selfie_url": row.get("avatar_selfie_url"),
         "character_id": row.get("avatar_character_id"),
     }
+
+
+@router.get("/status")
+async def get_avatar_status(user = Depends(current_user)):
+    """
+    Live status of the user's Runway avatar character.
+    Returns one of:
+      - { ready: false, status: "no_character" } — no avatar created yet
+      - { ready: false, status: "PROCESSING" }   — avatar is still being built
+      - { ready: true,  status: "READY" }        — safe to start a voice session
+      - { ready: false, status: "FAILED", failure: "..." }
+    """
+    row = supabase_service.get_user(user["id"]) or {}
+    char_id = row.get("avatar_character_id")
+    if not char_id:
+        return {"ready": False, "status": "no_character"}
+
+    import httpx, os
+    api_key = os.getenv("RUNWAY_API_KEY") or os.getenv("RUNWAYML_API_SECRET")
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"https://api.dev.runwayml.com/v1/avatars/{char_id}",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "X-Runway-Version": "2024-11-06",
+                },
+            )
+        if r.status_code >= 400:
+            return {"ready": False, "status": f"http_{r.status_code}", "detail": r.text[:200]}
+        data = r.json()
+        status = data.get("status", "UNKNOWN")
+        return {
+            "ready": status == "READY",
+            "status": status,
+            "voice_id": (data.get("voice") or {}).get("id"),
+            "voice_name": (data.get("voice") or {}).get("name"),
+        }
+    except Exception as e:
+        return {"ready": False, "status": "error", "detail": str(e)}

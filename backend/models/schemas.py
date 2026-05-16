@@ -16,16 +16,18 @@ class TryOnRequest(BaseModel):
     avatar_selfie_url: str
     item_name: str
     item_category: str = "tops"
-    model: str = "gen4_image_turbo"
+    model: str = "gen4_image"  # Default to full quality for best results
+    setting: Optional[str] = None  # Optional cinematic setting override
 
 
 class MultiItemTryOnRequest(BaseModel):
     avatar_selfie_url: str
     items: List[dict] = Field(
         ...,
-        description="List of {image_url, name, category} dicts. Max 2."
+        description="List of {image_url, name, category} dicts. No hard limit (uses composite collage)."
     )
-    model: str = "gen4_image_turbo"
+    model: str = "gen4_image"
+    setting: Optional[str] = None
 
 
 class EventSceneRequest(BaseModel):
@@ -52,6 +54,46 @@ class AddWardrobeFromUrl(BaseModel):
     source_url: Optional[str] = None
     tags: List[str] = []
     clean: Optional[str] = "none"  # "auto" | "runway" | "rembg" | "none"
+
+
+class ExtractFromImage(BaseModel):
+    """Save a garment from any image (e.g. a friend-shared try-on or outfit
+    preview) into the user's wardrobe. Always runs the cleaner."""
+    image_url: str
+    name: str = "Inspired item"
+    category: str = "tops"
+    occasion: Optional[str] = "casual"
+    notes: Optional[str] = None
+
+
+class DetectedItem(BaseModel):
+    """One garment detected by Claude vision in a multi-item photo."""
+    name: str
+    category: str  # tops | bottoms | dresses | outerwear | shoes | accessories
+    color: Optional[str] = None
+    brand: Optional[str] = None
+    occasion: Optional[str] = "casual"
+    position: Optional[str] = None  # vision-supplied locator hint, fed to Runway isolation
+
+
+class DetectItemsResponse(BaseModel):
+    image_url: str
+    detected: List[DetectedItem]
+
+
+class AddMultiRequest(BaseModel):
+    source_image_url: str
+    items: List[DetectedItem]
+
+
+class AddMultiFailure(BaseModel):
+    name: str
+    reason: str
+
+
+class AddMultiResponse(BaseModel):
+    created: List[dict]  # WardrobeItem-shaped rows
+    failed: List[AddMultiFailure]
 
 
 class ScrapeRequest(BaseModel):

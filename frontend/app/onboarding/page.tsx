@@ -1,28 +1,57 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Upload, Check, Loader2, Camera, Sparkles, Info } from "lucide-react";
+import { Loader2, Camera, Star, Trash2, Plus, Sparkles, Check } from "lucide-react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
-import { apiPost, apiUpload } from "@/lib/api";
+import { apiGet, apiUpload, apiDelete } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+
+interface SelfieListResponse {
+  selfie_urls: string[];
+  primary_url: string | null;
+}
 
 export default function OnboardingPage() {
   const { user } = useAuth();
-  const { avatarSelfieUrl, avatarCharacterId, setAvatar, setSelfieOnly } = useAppStore();
+  const { avatarSelfieUrl, setSelfieOnly } = useAppStore();
   const [uploading, setUploading] = useState(false);
-  const [creatingChar, setCreatingChar] = useState(false);
-  const [manualId, setManualId] = useState("");
-  const [fallbackInfo, setFallbackInfo] = useState<{ instructions_text?: string; fallback?: string } | null>(null);
+  const [selfies, setSelfies] = useState<string[]>([]);
+  const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const refreshSelfies = useCallback(async () => {
+    try {
+      const data = await apiGet<SelfieListResponse>("/api/avatar/selfies");
+      setSelfies(data.selfie_urls);
+      setPrimaryUrl(data.primary_url);
+      if (data.primary_url && data.primary_url !== avatarSelfieUrl) {
+        setSelfieOnly(data.primary_url);
+      }
+    } catch {
+      // v2d migration may not be applied; selfie list endpoint silently no-ops
+    }
+  }, [avatarSelfieUrl, setSelfieOnly]);
+
+  useEffect(() => {
+    if (!user) return;
+    refreshSelfies();
+  }, [user, refreshSelfies]);
 
   async function handleUpload(file: File) {
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await apiUpload<{ selfie_url: string }>("/api/avatar/upload-selfie", fd);
+      const res = await apiUpload<{ selfie_url: string; selfie_urls?: string[] }>(
+        "/api/avatar/upload-selfie", fd
+      );
       setSelfieOnly(res.selfie_url);
+      if (res.selfie_urls) setSelfies(res.selfie_urls);
+      await refreshSelfies();
       toast.success("Selfie uploaded.");
     } catch (e) {
       toast.error(`Upload failed: ${e instanceof Error ? e.message : "unknown"}`);
@@ -31,229 +60,177 @@ export default function OnboardingPage() {
     }
   }
 
-  async function createCharacter() {
-    if (!avatarSelfieUrl) return;
-    setCreatingChar(true);
-    setFallbackInfo(null);
+  async function setPrimary(url: string) {
     try {
-      const res = await apiPost<{ character_id: string }>("/api/avatar/create-character", {
-        selfie_url: avatarSelfieUrl,
-        name: "My Stylist",
-      });
-      setAvatar(res.character_id, avatarSelfieUrl);
-      toast.success("Character created!");
+      const fd = new FormData();
+      fd.append("url", url);
+      const res = await apiUpload<{ primary_url: string }>(
+        "/api/avatar/set-primary-selfie", fd
+      );
+      setPrimaryUrl(res.primary_url);
+      setSelfieOnly(res.primary_url);
+      toast.success("Primary selfie updated.");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // Backend returns structured fallback when programmatic creation isn't available
-      try {
-        const parsed = JSON.parse(msg);
-        setFallbackInfo(parsed);
-      } catch {
-        setFallbackInfo({ fallback: msg });
-      }
-      toast.info("Programmatic character creation unavailable. See manual fallback below.");
-    } finally {
-      setCreatingChar(false);
+      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
   }
 
-  async function saveManualCharId() {
-    if (!manualId.trim()) return;
-    const fd = new FormData();
-    fd.append("character_id", manualId.trim());
+  async function removeSelfie(url: string) {
     try {
-      await apiUpload("/api/avatar/save-character-id", fd);
-      setAvatar(manualId.trim(), avatarSelfieUrl);
-      toast.success("Character ID saved.");
-      setFallbackInfo(null);
+      await apiDelete<{ selfie_urls: string[]; primary_url: string | null }>(
+        `/api/avatar/selfie?url=${encodeURIComponent(url)}`
+      );
+      await refreshSelfies();
+      toast.success("Selfie removed.");
     } catch (e) {
-      toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
+      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
   }
 
   return (
     <div className="max-w-3xl">
       <PageHeader
-        eyebrow="Step 1"
-        title="Create your avatar."
-        subtitle="One selfie. Front-facing, good lighting. Your avatar will look like you across every try-on and chat."
+        eyebrow="Setup"
+        title="Add your selfies."
+        subtitle="Upload up to 3 selfies. Your primary one is used as the model in try-ons."
       />
 
-      {/* Step 1: Selfie upload */}
-      <Step
-        n={1}
-        title="Upload your selfie"
-        done={!!avatarSelfieUrl}
-        active={!avatarSelfieUrl}
+      {/* Single step: selfie gallery */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="surface p-7 mb-5"
+        style={{ borderColor: avatarSelfieUrl ? "var(--border)" : "var(--border-gold)" }}
       >
-        <div className="flex items-center gap-6">
-          <SelfieDropzone onFile={handleUpload} loading={uploading} preview={avatarSelfieUrl} />
-          <div className="text-sm" style={{ color: "var(--text-muted)" }}>
-            <p className="mb-2 font-medium" style={{ color: "var(--text)" }}>Tips for best results:</p>
-            <ul className="space-y-1" style={{ paddingLeft: "1rem", listStyle: "disc" }}>
-              <li>Front-facing, shoulders visible</li>
-              <li>Even lighting, plain background</li>
-              <li>Minimum 512×512 pixels</li>
-              <li>JPEG, PNG, or WebP (max 16MB)</li>
-            </ul>
-          </div>
-        </div>
-      </Step>
-
-      {/* Step 2: Create character */}
-      <Step
-        n={2}
-        title="Create your AI stylist character"
-        done={!!avatarCharacterId}
-        active={!!avatarSelfieUrl && !avatarCharacterId}
-        disabled={!avatarSelfieUrl}
-      >
-        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-          We&apos;ll create a Runway Custom Character from your selfie. This gives you a talking avatar
-          on the AI Stylist page that knows your wardrobe.
-        </p>
-        <button
-          className="btn-primary"
-          onClick={createCharacter}
-          disabled={!avatarSelfieUrl || creatingChar || !!avatarCharacterId}
-        >
-          {creatingChar ? <><Loader2 size={16} className="spin" /> Creating...</> :
-           avatarCharacterId ? <><Check size={16} /> Created</> :
-           <><Sparkles size={16} /> Create character</>}
-        </button>
-
-        {fallbackInfo && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="surface p-5 mt-5"
-            style={{ borderColor: "var(--border-gold)" }}
+        <div className="flex items-center gap-3 mb-4">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+            style={{
+              background: avatarSelfieUrl ? "var(--gold)" : "var(--gold-dim)",
+              color: avatarSelfieUrl ? "var(--on-gold)" : "var(--gold)",
+            }}
           >
-            <div className="flex items-start gap-2 mb-3">
-              <Info size={16} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
-              <div className="text-sm" style={{ color: "var(--text-muted)" }}>
-                {fallbackInfo.fallback || "Programmatic character creation isn't available. Use the manual portal flow:"}
-              </div>
-            </div>
-            <ol className="text-sm mb-3" style={{ color: "var(--text)", paddingLeft: "1.2rem", listStyle: "decimal" }}>
-              <li>Open <a href="https://dev.runwayml.com" target="_blank" rel="noreferrer" style={{ color: "var(--gold)", textDecoration: "underline" }}>dev.runwayml.com</a> → Characters → Create Character.</li>
-              <li>Upload your selfie. Use the instructions text below as the system prompt.</li>
-              <li>Copy the resulting character UUID and paste it here.</li>
-            </ol>
-            {fallbackInfo.instructions_text && (
-              <details className="mb-3">
-                <summary className="text-sm cursor-pointer" style={{ color: "var(--gold)" }}>
-                  View suggested instructions text
-                </summary>
-                <pre className="text-xs mt-2 p-3 whitespace-pre-wrap" style={{ background: "var(--bg)", borderRadius: 8, color: "var(--text-muted)", maxHeight: 200, overflow: "auto" }}>
-                  {fallbackInfo.instructions_text}
-                </pre>
-              </details>
-            )}
-            <div className="flex gap-2">
-              <input
-                className="input"
-                placeholder="Paste character UUID here"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-              />
-              <button className="btn-secondary" onClick={saveManualCharId} disabled={!manualId.trim()}>
-                Save
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </Step>
+            {avatarSelfieUrl ? <Check size={16} /> : "1"}
+          </div>
+          <h2 className="font-display text-2xl">Your selfies</h2>
+        </div>
 
-      {/* Step 3: Sync wardrobe */}
-      <Step
-        n={3}
-        title="Sync wardrobe to stylist (optional)"
-        done={false}
-        active={!!avatarCharacterId}
-        disabled={!avatarCharacterId}
+        <div className="flex flex-wrap gap-3 mb-3">
+          {selfies.map((url) => {
+            const isPrimary = url === primaryUrl;
+            return (
+              <div
+                key={url}
+                className="relative surface overflow-hidden group"
+                style={{
+                  width: 130, height: 160, padding: 0,
+                  borderColor: isPrimary ? "var(--gold)" : undefined,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="Selfie" className="w-full h-full object-cover" />
+                {isPrimary && (
+                  <div
+                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1"
+                    style={{ background: "var(--gold)", color: "var(--on-gold)" }}
+                  >
+                    <Star size={10} /> Primary
+                  </div>
+                )}
+                {!isPrimary && (
+                  <button
+                    onClick={() => setPrimary(url)}
+                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", cursor: "pointer" }}
+                  >
+                    <Star size={10} /> Set primary
+                  </button>
+                )}
+                <button
+                  onClick={() => setPendingDelete(url)}
+                  className="absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
+                  style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--red)", cursor: "pointer" }}
+                  aria-label="Remove"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            );
+          })}
+
+          {selfies.length < 3 && (
+            <SelfieDropzone onFile={handleUpload} loading={uploading} preview={null} compact />
+          )}
+        </div>
+
+        <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {selfies.length === 0 && "Upload your first selfie to get started."}
+          {selfies.length > 0 && selfies.length < 3 && `${3 - selfies.length} more slot${3 - selfies.length === 1 ? "" : "s"} available.`}
+          {selfies.length === 3 && "Maximum reached. Delete one to upload another."}
+        </div>
+
+        <div className="text-xs mt-3" style={{ color: "var(--text-dim)" }}>
+          <strong>Tips:</strong> Front-facing, shoulders visible, even lighting, plain background, 512×512 min, JPEG/PNG/WebP up to 16MB.
+        </div>
+      </motion.section>
+
+      {/* Stylist info card - no setup needed, always available */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="surface p-5 mb-5 flex items-start gap-4"
+        style={{ background: "var(--gold-dim)", borderColor: "var(--border-gold)" }}
       >
-        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-          Once you&apos;ve added items to your wardrobe, sync them to your stylist&apos;s knowledge base so it can recommend specific items by name.
-        </p>
-        <button
-          className="btn-secondary"
-          disabled={!avatarCharacterId}
-          onClick={async () => {
-            try {
-              const res = await apiPost<{ uploaded: boolean; item_count: number }>(
-                "/api/avatar/sync-wardrobe-knowledge",
-                {}
-              );
-              toast.success(
-                res.uploaded
-                  ? `Synced ${res.item_count} items to stylist.`
-                  : `Generated knowledge for ${res.item_count} items (manual upload needed).`
-              );
-            } catch (e) {
-              toast.error(`Sync failed: ${e instanceof Error ? e.message : "unknown"}`);
-            }
-          }}
-        >
-          Sync wardrobe knowledge
-        </button>
-      </Step>
+        <Sparkles size={20} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
+        <div className="flex-1 text-sm">
+          <div className="font-display text-lg mb-1" style={{ color: "var(--text)" }}>
+            Your AI stylist is ready
+          </div>
+          <p style={{ color: "var(--text-muted)" }}>
+            Aria, our admin stylist, is always available. No setup needed — go to{" "}
+            <Link href="/stylist" style={{ color: "var(--gold)", textDecoration: "underline" }}>
+              AI Stylist
+            </Link>{" "}
+            to talk or type with her about your wardrobe.
+          </p>
+        </div>
+      </motion.div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        title="Remove this selfie?"
+        description="It'll be removed from your gallery. Try-ons that already used it stay intact."
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => pendingDelete && removeSelfie(pendingDelete)}
+      />
     </div>
   );
 }
 
-function Step({
-  n, title, done, active, disabled, children,
-}: {
-  n: number; title: string; done: boolean; active: boolean;
-  disabled?: boolean; children: React.ReactNode;
-}) {
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: disabled ? 0.5 : 1, y: 0 }}
-      className="surface p-7 mb-5"
-      style={{
-        borderColor: active ? "var(--border-gold)" : "var(--border)",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      <div className="flex items-center gap-3 mb-4">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-          style={{
-            background: done ? "var(--gold)" : active ? "var(--gold-dim)" : "var(--surface3)",
-            color: done ? "var(--bg)" : active ? "var(--gold)" : "var(--text-dim)",
-          }}
-        >
-          {done ? <Check size={16} /> : n}
-        </div>
-        <h2 className="font-display text-2xl">{title}</h2>
-      </div>
-      {children}
-    </motion.section>
-  );
-}
-
 function SelfieDropzone({
-  onFile, loading, preview,
+  onFile, loading, preview, compact = false,
 }: {
-  onFile: (f: File) => void; loading: boolean; preview: string | null;
+  onFile: (f: File) => void; loading: boolean; preview: string | null; compact?: boolean;
 }) {
+  const w = compact ? 130 : 200;
+  const h = compact ? 160 : 200;
   return (
     <label
       className="surface flex items-center justify-center cursor-pointer overflow-hidden"
-      style={{ width: 200, height: 200, borderStyle: preview ? "solid" : "dashed" }}
+      style={{ width: w, height: h, borderStyle: preview ? "solid" : "dashed" }}
     >
       {loading ? (
-        <Loader2 size={28} className="spin" style={{ color: "var(--gold)" }} />
+        <Loader2 size={compact ? 22 : 28} className="spin" style={{ color: "var(--gold)" }} />
       ) : preview ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={preview} alt="Selfie preview" className="w-full h-full object-cover" />
       ) : (
         <div className="text-center" style={{ color: "var(--text-dim)" }}>
-          <Camera size={28} className="mx-auto mb-2" />
-          <div className="text-xs">Click to upload selfie</div>
+          {compact ? <Plus size={22} className="mx-auto mb-1" /> : <Camera size={28} className="mx-auto mb-2" />}
+          <div className="text-xs">{compact ? "Add another" : "Click to upload selfie"}</div>
         </div>
       )}
       <input

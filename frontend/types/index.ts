@@ -42,3 +42,12 @@ export interface ChatMessage {
   content: string;
   suggestedItemIds?: string[];
 }
+
+export interface DetectedItem {
+  name: string;
+  category: WardrobeItem["category"];
+  color?: string | null;
+  brand?: string | null;
+  occasion?: WardrobeItem["occasion"];
+  position?: string | null;
+}

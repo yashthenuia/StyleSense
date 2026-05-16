@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/Dialog";
 
 interface SearchResult {
   id: string;
@@ -35,6 +36,7 @@ export default function FriendsPage() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [copied, setCopied] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<FriendRow | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -87,8 +89,7 @@ export default function FriendsPage() {
     }
   }
 
-  async function remove(friendshipId: string) {
-    if (!confirm("Remove this friend?")) return;
+  async function performRemove(friendshipId: string) {
     try {
       await apiDelete(`/api/friends/${friendshipId}`);
       toast.success("Removed.");
@@ -200,7 +201,7 @@ export default function FriendsPage() {
                 actions={
                   <>
                     <span className="chip">Awaiting reply</span>
-                    <button className="btn-secondary" onClick={() => remove(f.friendship_id)}
+                    <button className="btn-secondary" onClick={() => setPendingRemove(f)}
                             style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem" }}>
                       <X size={14} /> Cancel
                     </button>
@@ -231,7 +232,7 @@ export default function FriendsPage() {
                     <Link href={`/chat?with=${f.other.id}`} className="btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem" }}>
                       <MessagesSquare size={14} /> Message
                     </Link>
-                    <button className="btn-secondary" onClick={() => remove(f.friendship_id)}
+                    <button className="btn-secondary" onClick={() => setPendingRemove(f)}
                             style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem" }}>
                       Remove
                     </button>
@@ -241,6 +242,16 @@ export default function FriendsPage() {
           </div>
         )}
       </Section>
+
+      <ConfirmDialog
+        open={!!pendingRemove}
+        onClose={() => setPendingRemove(null)}
+        title={pendingRemove?.status === "pending" ? "Cancel friend request?" : "Remove this friend?"}
+        description={pendingRemove?.other.full_name || pendingRemove?.other.email || undefined}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => pendingRemove && performRemove(pendingRemove.friendship_id)}
+      />
     </div>
   );
 }

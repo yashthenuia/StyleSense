@@ -87,12 +87,11 @@ def _fit_portrait_3x4(img: Image.Image, background: tuple) -> Image.Image:
     return canvas
 
 
-def clean_with_runway(image_url: str, item_name: str, item_category: str = "tops") -> str | None:
+def clean_with_runway(image_url: str, item_name: str, item_category: str = "tops", model: str = "gen4_image") -> str | None:
     """
-    Use Runway gen4_image_turbo to re-synthesize a clean studio shot of the garment.
+    Use Runway to re-synthesize a clean studio shot of the garment.
+    Defaults to full-quality gen4_image for best output.
     Returns the URL of the generated image, or None on any error.
-
-    Requires Runway credits. Will fail with 'not enough credits' if account has none.
     """
     try:
         from services.runway_service import client
@@ -101,18 +100,28 @@ def clean_with_runway(image_url: str, item_name: str, item_category: str = "tops
         logger.warning(f"Runway service unavailable: {e}")
         return None
 
+    # Aggressive negative-prompted, ghost-mannequin style cleanup.
+    # Runway-style models often re-include the model when given a person photo.
+    # The fix is to over-specify "ghost mannequin" / "invisible mannequin" which
+    # is the actual e-commerce term for "garment shaped like a body but no body".
     prompt = (
-        f"Clean studio product photograph of @garment, isolated on pure white background. "
-        f"E-commerce style, professional fashion catalog, sharp focus, even lighting. "
-        f"NO person, NO hands, NO body, NO mannequin, NO hangers. "
-        f"Just the {item_name} ({item_category}) on white. Magazine quality."
+        f"Ghost mannequin product photograph of the {item_name} from @garment. "
+        f"Invisible mannequin photography style: the garment holds its 3D shape "
+        f"as if worn, but there is NO person, NO mannequin, NO head, NO neck, "
+        f"NO arms, NO hands, NO legs, NO feet, NO body parts visible anywhere. "
+        f"Pure white seamless background, centered framing, full garment visible "
+        f"from collar to hem, no cropping. Faithful to original colors, fabric, "
+        f"texture, embroidery, beadwork, stitching, prints, drape, and silhouette. "
+        f"Photorealistic e-commerce catalog product shot, Net-a-Porter / Farfetch / "
+        f"Saks Fifth Avenue style, soft even studio lighting, subtle shadow under "
+        f"the garment, 8K resolution, ultra sharp detail. {item_category} only on white."
     )
 
     try:
         task = client.text_to_image.create(
-            model="gen4_image_turbo",
+            model=model,
             prompt_text=prompt,
-            ratio="720:960",  # 3:4-ish portrait
+            ratio="720:960",
             reference_images=[{"uri": image_url, "tag": "garment"}],
         ).wait_for_task_output(timeout=180)
         return task.output[0]
@@ -123,8 +132,66 @@ def clean_with_runway(image_url: str, item_name: str, item_category: str = "tops
         logger.warning("Runway clean timed out")
         return None
     except Exception as e:
-        # Catches BadRequestError (e.g. not enough credits), NetworkError, etc.
         logger.warning(f"Runway clean error: {type(e).__name__}: {e}")
+        return None
+
+
+def runway_isolate_item(
+    source_image_url: str,
+    item_name: str,
+    item_category: str = "tops",
+    color: str | None = None,
+    position: str | None = None,
+    model: str = "gen4_image_turbo",
+) -> str | None:
+    """
+    Isolate ONE specific garment from a multi-item photo. Used by the
+    multi-item wardrobe-add flow: the same source photo is fed once per item
+    with a description targeting that specific piece.
+
+    Returns the URL of the isolated product shot, or None on failure.
+    """
+    try:
+        from services.runway_service import client
+        from runwayml import TaskFailedError, TaskTimeoutError
+    except Exception as e:
+        logger.warning(f"Runway service unavailable: {e}")
+        return None
+
+    color_clause = f"color {color}, " if color else ""
+    position_clause = f" The target item is located {position} in the @source photo." if position else ""
+
+    prompt = (
+        f"Ghost mannequin product photograph of the {color_clause}{item_name} "
+        f"({item_category}) extracted from the @source photo.{position_clause} "
+        f"Isolate ONLY this single garment - remove every other clothing item, "
+        f"accessory, person, mannequin, body part, hand, face, hanger, "
+        f"furniture, and background. The garment holds its 3D shape as if worn "
+        f"by an invisible mannequin. Pure white seamless background, centered "
+        f"framing, full garment visible from top to bottom with no cropping. "
+        f"Faithful to the original color, fabric, texture, stitching, and "
+        f"silhouette of the target item. Photorealistic e-commerce catalog "
+        f"product shot, Net-a-Porter / Farfetch style, soft even studio "
+        f"lighting, subtle shadow under the garment, 8K resolution, ultra "
+        f"sharp detail."
+    )
+
+    try:
+        task = client.text_to_image.create(
+            model=model,
+            prompt_text=prompt,
+            ratio="720:960",
+            reference_images=[{"uri": source_image_url, "tag": "source"}],
+        ).wait_for_task_output(timeout=180)
+        return task.output[0]
+    except TaskFailedError as e:
+        logger.warning(f"Runway isolate failed for '{item_name}': {e.task_details}")
+        return None
+    except TaskTimeoutError:
+        logger.warning(f"Runway isolate timed out for '{item_name}'")
+        return None
+    except Exception as e:
+        logger.warning(f"Runway isolate error for '{item_name}': {type(e).__name__}: {e}")
         return None
 
 
