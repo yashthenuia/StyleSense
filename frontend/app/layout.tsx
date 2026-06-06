@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "@runwayml/avatars-react/styles.css";
-import { Topbar } from "@/components/layout/Topbar";
+import { LayoutClient } from "@/components/layout/LayoutClient";
 import { Toaster } from "@/components/ui/Toast";
 import { AuthProvider } from "@/components/AuthProvider";
 import { getSupabaseServer } from "@/lib/supabase/server";
@@ -56,10 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <AuthProvider initialUser={user} initialProfile={profile}>
           {user ? (
-            <div className="flex flex-col h-screen overflow-hidden">
-              <Topbar />
-              <main className="flex-1 min-h-0 overflow-y-auto px-8 pt-6 pb-16">{children}</main>
-            </div>
+            <LayoutClient>{children}</LayoutClient>
           ) : (
             // Public pages (landing / login / signup) render their own full-height layout
             <>{children}</>

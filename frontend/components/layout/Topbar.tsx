@@ -16,7 +16,7 @@ const PRIMARY_NAV = [
   { href: "/stylist",   label: "Aria" },
 ];
 
-export function Topbar() {
+export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
   const { user, profile, signOut } = useAuth();
   const pathname = usePathname();
   const supabase = getSupabaseBrowser();
@@ -83,7 +83,7 @@ export function Topbar() {
         style={{ borderBottom: "1px solid var(--border)" }}
       >
         {/* LEFT — Brand + tasks */}
-        <div className="flex items-center gap-2 md:gap-4 min-w-0">
+        <div id="topbar-brand-group" className="flex items-center gap-2 md:gap-4 min-w-0 cursor-pointer" onClick={onBrandClick}>
           <Link href="/dashboard" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "clamp(1.2rem, 4vw, 1.6rem)", textDecoration: "none" }}>
             StyleSense
           </Link>
