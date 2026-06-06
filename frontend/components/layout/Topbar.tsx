@@ -114,20 +114,14 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
               <Link
                 key={href}
                 href={href}
-                className="relative px-3 py-2 text-sm transition-colors"
-                style={{
-                  color: active ? "var(--gold)" : "var(--text-muted)",
-                  textDecoration: "none",
-                  fontWeight: active ? 600 : 500,
-                }}
+                className={
+                  active
+                    ? "bg-[#eae4da] text-[#301c10] border-transparent font-bold rounded-xl px-4 py-2 text-sm transition-all"
+                    : "bg-transparent border-2 border-[#301c10] text-[#301c10] hover:bg-[#301c10]/5 font-normal rounded-xl px-4 py-2 text-sm transition-all"
+                }
+                style={{ textDecoration: "none" }}
               >
                 {label}
-                {active && (
-                  <span
-                    className="absolute left-2 right-2"
-                    style={{ bottom: -1, height: 2, background: "var(--gold)", borderRadius: 2 }}
-                  />
-                )}
               </Link>
             );
           })}
@@ -259,13 +253,12 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
                   key={href}
                   href={href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block px-4 py-2.5 text-sm rounded transition-colors"
-                  style={{
-                    color: active ? "var(--gold)" : "var(--text)",
-                    textDecoration: "none",
-                    fontWeight: active ? 600 : 500,
-                    background: active ? "var(--gold-dim)" : "transparent",
-                  }}
+                  className={
+                    active
+                      ? "block bg-[#eae4da] text-[#301c10] font-bold rounded-xl px-4 py-2.5 text-sm transition-all"
+                      : "block bg-transparent border-2 border-[#301c10] text-[#301c10] font-normal rounded-xl px-4 py-2.5 text-sm transition-all"
+                  }
+                  style={{ textDecoration: "none" }}
                 >
                   {label}
                 </Link>

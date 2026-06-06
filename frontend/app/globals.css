@@ -28,6 +28,10 @@
   --gold-glow:  rgba(218, 165, 32, 0.28);
   --on-gold:    #1a1410;  /* dark text on light gold backgrounds */
 
+  /* Refined Minimal Outline palette */
+  --ink:       #301c10;   /* deep espresso — border + text for action elements */
+  --parchment: #eae4da;   /* warm off-white — active chip/tab fill */
+
   /* Accents */
   --purple: #8b6fe8;
   --teal:   #5cb8b2;
@@ -35,10 +39,11 @@
   --green:  #6b8e5f;
   --red:    #e85c5c;
 
-  /* Radii — boxy aesthetic */
+  /* Radii — boxy aesthetic for surfaces, rounded for interactive elements */
   --radius-sm: 0px;
   --radius:    0px;
   --radius-lg: 0px;
+  --radius-btn: 0.75rem; /* rounded-xl for buttons and chips */
 }
 
 * { box-sizing: border-box; }
@@ -78,36 +83,14 @@ html, body {
   box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.5);
 }
 
-.btn-primary {
-  background: var(--gold);
-  color: var(--on-gold);
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 1.5rem;
-  border: 2px solid var(--gold);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-family: inherit;
-  font-size: 0.95rem;
-}
-.btn-primary:hover:not(:disabled) {
-  background: var(--gold-light);
-  border-color: var(--gold-light);
-  transform: translateY(-1px);
-}
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
+.btn-primary,
 .btn-secondary {
-  background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  border-radius: var(--radius-btn);
   padding: 0.75rem 1.5rem;
-  font-weight: 500;
+  border: 2px solid var(--ink);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
@@ -117,11 +100,13 @@ html, body {
   font-family: inherit;
   font-size: 0.95rem;
 }
+.btn-primary:hover:not(:disabled),
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface2);
-  border-color: var(--border-hover);
+  background: var(--ink);
+  color: var(--parchment);
 }
-.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:disabled,
+.btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .input {
   background: var(--surface);
@@ -150,18 +135,24 @@ html, body {
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.85rem;
-  background: var(--surface);
-  border: 2px solid var(--border);
-  border-radius: 0px;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-btn);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--ink);
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.chip:hover { border-color: var(--gold); color: var(--gold); }
-.chip-active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.chip:hover { background: rgba(48, 28, 16, 0.05); }
+.chip-active {
+  background: var(--parchment);
+  color: var(--ink);
+  border-color: transparent;
+  font-weight: 700;
+}
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }
