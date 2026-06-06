@@ -19,7 +19,7 @@ function LoginInner() {
   const supabase = getSupabaseBrowser();
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get("next") || "/";
+  const next = search.get("next") || "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -65,7 +65,7 @@ function LoginInner() {
         className="surface w-full max-w-md p-8"
       >
         <div className="mb-7 text-center">
-          <div className="font-display text-4xl mb-1" style={{ color: "var(--gold)" }}>StyleAI</div>
+          <div className="font-display text-4xl mb-1" style={{ color: "var(--gold)" }}>StyleSense</div>
           <p className="text-xs uppercase tracking-widest" style={{ color: "var(--text-dim)" }}>
             Sign in to your closet
           </p>

@@ -52,37 +52,40 @@ export default function WardrobePage() {
     : items.filter((i) => i.category === filterCategory);
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Your closet"
-        title="Wardrobe."
-        subtitle="Add items by photo upload or product URL. Select up to 2 items, then open Studio to try them on."
-        action={
-          <div className="flex items-center gap-2">
-            {selectedItemIds.length > 0 && (
-              <Link href="/studio" className="btn-primary">
-                <Sparkles size={16} /> Try on {selectedItemIds.length} selected
-              </Link>
-            )}
-            <button className="btn-primary" onClick={() => setShowAdd(true)}>
-              <Plus size={16} /> Add item
-            </button>
-          </div>
-        }
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="Your closet"
+          tutorialKey="wardrobe"
+          subtitle="Add items by photo upload or product URL. Select up to 2 items, then open Studio to try them on."
+          action={
+            <div className="flex items-center gap-2">
+              {selectedItemIds.length > 0 && (
+                <Link href="/studio" className="btn-primary">
+                  <Sparkles size={16} /> Try on {selectedItemIds.length} selected
+                </Link>
+              )}
+              <button className="btn-primary" onClick={() => setShowAdd(true)}>
+                <Plus size={16} /> Add item
+              </button>
+            </div>
+          }
+        />
 
-      <div className="flex flex-wrap gap-2 mb-6">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c}
-            className={`chip ${filterCategory === c ? "chip-active" : ""}`}
-            onClick={() => setFilterCategory(c)}
-          >
-            {c}
-          </button>
-        ))}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              className={`chip ${filterCategory === c ? "chip-active" : ""}`}
+              onClick={() => setFilterCategory(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {loading ? (
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -151,6 +154,7 @@ export default function WardrobePage() {
           </AnimatePresence>
         </div>
       )}
+      </div>
 
       {selectedItemIds.length > 0 && (
         <div
@@ -512,7 +516,7 @@ function DetectedItemsChecklist({
         {initial.length} items detected
       </h2>
       <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-        Review, edit, then add. Each item gets isolated as its own clean product shot (~2 credits each).
+        Review, edit, then add. Each item gets isolated as its own clean product shot.
       </p>
 
       <div className="surface p-3 mb-5 flex items-center gap-3">

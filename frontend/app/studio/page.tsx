@@ -16,6 +16,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
+import { useSeenOnce } from "@/lib/useSeenOnce";
 import type { WardrobeItem } from "@/types";
 
 const EVENT_PRESETS = [
@@ -51,6 +52,7 @@ export default function StudioPage() {
   const [showFacePicker, setShowFacePicker] = useState(false);
   const [customFaceUrl, setCustomFaceUrl] = useState("");
   const [uploadingFace, setUploadingFace] = useState(false);
+  const taskHintSeen = useSeenOnce("studio-task-hint");
 
   async function handleFaceUpload(file: File) {
     setUploadingFace(true);
@@ -184,31 +186,34 @@ export default function StudioPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Studio"
-        title="Build Your Moment."
-        subtitle="Mix pieces from your closet, see them on you instantly, then bring them to life."
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="The atelier"
+          tutorialKey="studio"
+          subtitle="Mix pieces from your closet, see them on you instantly, then bring them to life."
+        />
 
-      {!avatarSelfieUrl && (
-        <div className="surface p-5 mb-6 flex items-start gap-3" style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}>
-          <AlertCircle size={18} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
-          <div className="text-sm">
-            <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--gold)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
+        {!avatarSelfieUrl && (
+          <div className="surface p-5 mb-6 flex items-start gap-3" style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}>
+            <AlertCircle size={18} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
+            <div className="text-sm">
+              <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--gold)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {items.length === 0 && (
-        <div className="surface p-5 mb-6 flex items-start gap-3">
-          <Shirt size={18} style={{ color: "var(--text-dim)", flexShrink: 0, marginTop: 2 }} />
-          <div className="text-sm">
-            <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--gold)", textDecoration: "underline" }}>Wardrobe</Link> first.
+        {items.length === 0 && (
+          <div className="surface p-5 mb-6 flex items-start gap-3">
+            <Shirt size={18} style={{ color: "var(--text-dim)", flexShrink: 0, marginTop: 2 }} />
+            <div className="text-sm">
+              <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--gold)", textDecoration: "underline" }}>Wardrobe</Link> first.
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-3">
           <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
@@ -299,9 +304,11 @@ export default function StudioPage() {
                       <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
                         Pick items + click Generate
                       </div>
-                      <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                        You can navigate away — task keeps running
-                      </div>
+                      {!taskHintSeen && (
+                        <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                          You can navigate away — task keeps running
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -461,10 +468,10 @@ export default function StudioPage() {
             <div className="flex gap-1 mb-3">
               <button className={`chip flex-1 justify-center ${quality === "standard" ? "chip-active" : ""}`}
                       onClick={() => setQuality("standard")} style={{ fontSize: "0.7rem" }}
-                      title="Faster (~2 credits)">Standard</button>
+                      title="Faster">Standard</button>
               <button className={`chip flex-1 justify-center ${quality === "pro" ? "chip-active" : ""}`}
                       onClick={() => setQuality("pro")} style={{ fontSize: "0.7rem" }}
-                      title="Best quality (~5 credits)">Pro ✦</button>
+                      title="Best quality">Pro ✦</button>
             </div>
 
             <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
@@ -518,7 +525,6 @@ export default function StudioPage() {
                 <button className="btn-primary w-full" onClick={animate} disabled={animating}>
                   {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (5s video)</>}
                 </button>
-                <p className="text-xs mt-2" style={{ color: "var(--text-dim)" }}>Uses gen4.5 · ~60 credits</p>
               </div>
 
               <div className="surface p-5 space-y-2">
@@ -532,6 +538,7 @@ export default function StudioPage() {
             </>
           )}
         </div>
+      </div>
       </div>
 
       {showShare && resultId && (

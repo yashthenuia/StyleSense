@@ -9,6 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiUpload, apiDelete } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
+import { useSeenOnce } from "@/lib/useSeenOnce";
 
 interface SelfieListResponse {
   selfie_urls: string[];
@@ -22,6 +23,7 @@ export default function OnboardingPage() {
   const [selfies, setSelfies] = useState<string[]>([]);
   const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const tipsSeen = useSeenOnce("onboarding-tips");
 
   const refreshSelfies = useCallback(async () => {
     try {
@@ -92,6 +94,7 @@ export default function OnboardingPage() {
       <PageHeader
         eyebrow="Setup"
         title="Add your selfies."
+        tutorialKey="onboarding"
         subtitle="Upload up to 3 selfies. Your primary one is used as the model in try-ons."
       />
 
@@ -169,9 +172,11 @@ export default function OnboardingPage() {
           {selfies.length === 3 && "Maximum reached. Delete one to upload another."}
         </div>
 
-        <div className="text-xs mt-3" style={{ color: "var(--text-dim)" }}>
-          <strong>Tips:</strong> Front-facing, shoulders visible, even lighting, plain background, 512×512 min, JPEG/PNG/WebP up to 16MB.
-        </div>
+        {!tipsSeen && (
+          <div className="text-xs mt-3" style={{ color: "var(--text-dim)" }}>
+            <strong>Tips:</strong> Front-facing, shoulders visible, even lighting, plain background, 512×512 min, JPEG/PNG/WebP up to 16MB.
+          </div>
+        )}
       </motion.section>
 
       {/* Stylist info card - no setup needed, always available */}

@@ -178,7 +178,7 @@ export function TryOnDetailModal({
         open={showExtractDialog}
         onClose={() => setShowExtractDialog(false)}
         title="Save this garment to your wardrobe?"
-        description="We'll use Runway to isolate the clothing from this image and add it to your wardrobe. ~5 credits."
+        description="We'll use Runway to isolate the clothing from this image and add it to your wardrobe."
         placeholder="e.g. Gold sequin gown"
         defaultValue={(result.event_context || "Inspired item").slice(0, 60)}
         confirmLabel={extracting ? "Extracting..." : "Save to wardrobe"}

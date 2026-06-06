@@ -9,29 +9,23 @@ import { useTasks, selectRunningCount } from "@/store/tasks";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 const PRIMARY_NAV = [
-  { href: "/",         label: "Dashboard" },
-  { href: "/wardrobe", label: "Wardrobe" },
-  { href: "/studio",   label: "Studio" },
-  { href: "/outfits",  label: "Outfits" },
-  { href: "/stylist",  label: "Stylist" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/wardrobe",  label: "Wardrobe" },
+  { href: "/studio",    label: "Studio" },
+  { href: "/outfits",   label: "Outfits" },
+  { href: "/stylist",   label: "Aria" },
 ];
 
 export function Topbar() {
   const { user, profile, signOut } = useAuth();
   const pathname = usePathname();
   const supabase = getSupabaseBrowser();
-  const [healthy, setHealthy] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pendingFriends, setPendingFriends] = useState(0);
   const [unreadMsgs, setUnreadMsgs] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const runningCount = useTasks(selectRunningCount);
-
-  useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    fetch(`${url}/health`).then((r) => setHealthy(r.ok)).catch(() => setHealthy(false));
-  }, []);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -83,21 +77,14 @@ export function Topbar() {
 
   return (
     <header
-      className="flex items-center px-8 py-4 relative gap-6"
+      className="flex items-center px-8 py-4 relative gap-6 shrink-0"
       style={{ borderBottom: "1px solid var(--border)" }}
     >
-      {/* LEFT — Brand + health/tasks */}
+      {/* LEFT — Brand + tasks */}
       <div className="flex items-center gap-4 min-w-0">
-        <Link href="/" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "1.6rem", textDecoration: "none" }}>
-          StyleAI
+        <Link href="/dashboard" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "1.6rem", textDecoration: "none" }}>
+          StyleSense
         </Link>
-        <div className="hidden md:flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: 999,
-            background: healthy ? "var(--green)" : healthy === false ? "var(--red)" : "var(--text-dim)",
-          }} />
-          <span className="text-xs">{healthy ? "Connected" : healthy === false ? "Offline" : "..."}</span>
-        </div>
         {runningCount > 0 && (
           <Link
             href="/studio"
@@ -121,7 +108,7 @@ export function Topbar() {
       {/* CENTER — Primary nav */}
       <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
         {PRIMARY_NAV.map(({ href, label }) => {
-          const active = href === "/" ? pathname === "/" : pathname?.startsWith(href);
+          const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
           return (
             <Link
               key={href}
@@ -195,10 +182,6 @@ export function Topbar() {
             className="flex items-center gap-3 cursor-pointer"
             style={{ background: "none", border: "none", color: "var(--text)" }}
           >
-            <div className="text-right hidden lg:block">
-              <div className="text-sm font-medium">{profile?.full_name || user?.email?.split("@")[0]}</div>
-              <div className="text-xs" style={{ color: "var(--text-dim)" }}>{user?.email}</div>
-            </div>
             <div
               className="rounded-full flex items-center justify-center font-semibold text-sm"
               style={{

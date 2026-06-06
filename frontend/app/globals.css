@@ -39,8 +39,6 @@
   --radius-sm: 10px;
   --radius:    16px;
   --radius-lg: 24px;
-
-  --sidebar-width: 64px;
 }
 
 * { box-sizing: border-box; }
@@ -54,7 +52,9 @@ html, body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
+  height: 100%;
+  /* The app shell owns its own scrolling; the document itself never scrolls. */
+  overflow: hidden;
 }
 
 .font-display {

@@ -112,13 +112,16 @@ export default function FriendsPage() {
   const outgoing = friends.filter((f) => f.status === "pending" && f.i_sent_request);
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Connect"
-        title="Friends."
-        subtitle="Search by email, username, or share code. Once you're friends you can DM and share outfits."
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="Connect"
+          tutorialKey="friends"
+          subtitle="Search by email, username, or share code. Once you're friends you can DM and share outfits."
+        />
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {/* Your share code card */}
       <div
         className="surface p-5 mb-6 flex items-center justify-between"
@@ -242,6 +245,7 @@ export default function FriendsPage() {
           </div>
         )}
       </Section>
+      </div>
 
       <ConfirmDialog
         open={!!pendingRemove}

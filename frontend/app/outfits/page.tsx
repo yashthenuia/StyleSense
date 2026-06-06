@@ -25,13 +25,16 @@ export default function OutfitsPage() {
   }, [user]);
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Saved looks"
-        title="Outfits."
-        subtitle="Your saved combinations from the Studio. Click any to view full size + items."
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="Saved looks"
+          tutorialKey="outfits"
+          subtitle="Your saved combinations from the Studio. Click any to view full size + items."
+        />
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {loading ? (
         <div className="grid grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -108,6 +111,7 @@ export default function OutfitsPage() {
           ))}
         </div>
       )}
+      </div>
 
       <AnimatePresence>
         {shareTarget && (

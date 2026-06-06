@@ -68,29 +68,31 @@ export default function StylistPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="AI Stylist"
-        title="Your personal stylist."
-        subtitle="Ask anything — I know your full wardrobe and pick specific items."
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          tutorialKey="stylist"
+          subtitle="Ask anything — I know your full wardrobe and pick specific items."
+        />
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-5">
-        <button
-          className={`chip ${tab === "chat" ? "chip-active" : ""}`}
-          onClick={() => setTab("chat")}
-        >
-          <MessageCircle size={12} style={{ marginRight: 6 }} /> Text chat
-        </button>
-        <button
-          className={`chip ${tab === "voice" ? "chip-active" : ""}`}
-          onClick={() => setTab("voice")}
-        >
-          <Mic size={12} style={{ marginRight: 6 }} /> Voice avatar
-        </button>
+        {/* Tabs */}
+        <div className="flex gap-2 mb-5">
+          <button
+            className={`chip ${tab === "chat" ? "chip-active" : ""}`}
+            onClick={() => setTab("chat")}
+          >
+            <MessageCircle size={12} style={{ marginRight: 6 }} /> Text chat
+          </button>
+          <button
+            className={`chip ${tab === "voice" ? "chip-active" : ""}`}
+            onClick={() => setTab("voice")}
+          >
+            <Mic size={12} style={{ marginRight: 6 }} /> Voice avatar
+          </button>
+        </div>
       </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-8">
           {tab === "chat" ? (
@@ -230,6 +232,7 @@ export default function StylistPage() {
             </Link>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

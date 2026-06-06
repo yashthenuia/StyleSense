@@ -97,23 +97,25 @@ function ChatInner() {
   }
 
   return (
-    <div>
-      <PageHeader
-        eyebrow="Direct messages"
-        title="Chat."
-        subtitle="Talk to your friends. Share outfits and try-ons. Get a second opinion."
-      />
+    <div className="h-full flex flex-col">
+      <div className="shrink-0">
+        <PageHeader
+          eyebrow="Direct messages"
+          tutorialKey="chat"
+          subtitle="Talk to your friends. Share outfits and try-ons. Get a second opinion."
+        />
+      </div>
 
-      <div className="grid grid-cols-12 gap-6" style={{ minHeight: 580 }}>
+      <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
         {/* LEFT: thread list */}
-        <div className="col-span-4 surface flex flex-col" style={{ minHeight: 580 }}>
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="col-span-4 surface flex flex-col min-h-0">
+          <div className="px-5 py-4 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
               Your conversations
             </div>
             <div className="font-display text-xl">All chats</div>
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {threads.length === 0 ? (
               <div className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 <Users size={24} className="mx-auto mb-2" style={{ color: "var(--text-dim)" }} />
@@ -133,7 +135,7 @@ function ChatInner() {
         </div>
 
         {/* RIGHT: active chat */}
-        <div className="col-span-8 surface flex flex-col" style={{ minHeight: 580, height: "calc(100vh - 240px)" }}>
+        <div className="col-span-8 surface flex flex-col min-h-0">
           {activeOther ? (
             <ChatThread otherId={activeOther} onMessageSent={loadThreads} />
           ) : (
