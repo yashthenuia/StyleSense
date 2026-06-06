@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { Plus, Trash2, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -87,7 +88,7 @@ export default function WardrobePage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="surface aspect-[3/4] shimmer" />
           ))}
@@ -103,7 +104,7 @@ export default function WardrobePage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           <AnimatePresence>
             {filtered.map((item, i) => {
               const selected = selectedItemIds.includes(item.id);
@@ -118,12 +119,15 @@ export default function WardrobePage() {
                   style={{ borderColor: selected ? "var(--gold)" : undefined }}
                   onClick={() => toggleSelected(item.id)}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image_url}
-                    alt={item.name}
-                    className="w-full aspect-[3/4] object-cover"
-                  />
+                  <div className="relative w-full aspect-[3/4]">
+                    <Image
+                      src={item.image_url}
+                      alt={item.name}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    />
+                  </div>
                   {selected && (
                     <div
                       className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs"

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
@@ -8,6 +9,7 @@ import {
   User as UserIcon, RefreshCw, Upload,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { GeneratingState } from "@/components/studio/GeneratingState";
 import { ShareToFriendModal } from "@/components/ShareToFriendModal";
 import { PromptDialog } from "@/components/ui/Dialog";
@@ -214,24 +216,31 @@ export default function StudioPage() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-3">
+      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-3">
           <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
             Your wardrobe
           </div>
-          <div className="grid grid-cols-2 gap-2 max-h-[600px] overflow-auto pr-1">
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-2 lg:overflow-y-auto lg:overflow-x-visible lg:max-h-[600px] lg:pr-1 lg:pb-0">
             {items.map((it) => {
               const sel = selectedItemIds.includes(it.id);
               return (
                 <button
                   key={it.id}
                   onClick={() => toggleSelected(it.id)}
-                  className="surface overflow-hidden relative"
+                  className="surface overflow-hidden relative flex-shrink-0 w-20 h-20 lg:w-auto lg:h-auto lg:flex-shrink"
                   style={{ padding: 0, cursor: "pointer", borderColor: sel ? "var(--gold)" : "var(--border)" }}
                   title={it.name}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={it.image_url} alt={it.name} className="w-full aspect-square object-cover" />
+                  <div className="relative w-full aspect-square">
+                    <Image
+                      src={it.image_url}
+                      alt={it.name}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 80px, 120px"
+                    />
+                  </div>
                   {sel && (
                     <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
                          style={{ background: "var(--gold)", color: "var(--on-gold)" }}>
@@ -244,7 +253,7 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <div className="col-span-6">
+        <div className="lg:col-span-6">
           {generating ? (
             <GeneratingState avatarUrl={avatarSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} />
           ) : resultUrl ? (
@@ -324,7 +333,7 @@ export default function StudioPage() {
           )}
         </div>
 
-        <div className="col-span-3 flex flex-col gap-3">
+        <div className="lg:col-span-3 flex flex-col gap-3">
           {/* FACE picker - shows current selfie + lets user switch */}
           <div className="surface p-5">
             <div className="flex items-center justify-between mb-3">
@@ -456,8 +465,9 @@ export default function StudioPage() {
               <div className="space-y-2 mb-3">
                 {selectedItems.map((it) => (
                   <div key={it.id} className="flex items-center gap-2 text-xs">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={it.image_url} alt={it.name} style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 6 }} />
+                    <div className="relative flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 6, overflow: "hidden" }}>
+                      <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="32px" />
+                    </div>
                     <span className="truncate flex-1">{it.name}</span>
                   </div>
                 ))}
@@ -485,6 +495,15 @@ export default function StudioPage() {
                     disabled={!effectiveSelfieUrl || selectedItems.length === 0 || generating}>
               {generating ? <><Loader2 size={16} className="spin" /> Manifesting</> : <><Sparkles size={16} /> Manifest This Look</>}
             </button>
+            {(generating || resultUrl) && (
+              <div className="mt-2">
+                <ProgressBar
+                  status={generating ? "running" : "complete"}
+                  estimatedSeconds={40}
+                  label="Generating try-on"
+                />
+              </div>
+            )}
             {selectedItems.length > 0 && !generating && (
               <button className="btn-secondary w-full mt-2" onClick={() => { clearSelected(); reset(); }} style={{ padding: "0.5rem 1rem" }}>
                 Clear & reset
@@ -510,6 +529,15 @@ export default function StudioPage() {
                   {eventLoading ? <Loader2 size={14} className="spin" /> : <MapPin size={14} />}
                   {eventLoading ? "Placing..." : "Place in scene"}
                 </button>
+                {(eventLoading || eventUrl) && (
+                  <div className="mt-2">
+                    <ProgressBar
+                      status={eventLoading ? "running" : "complete"}
+                      estimatedSeconds={25}
+                      label="Placing in scene"
+                    />
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1 mt-3">
                   {EVENT_PRESETS.map((p) => (
                     <button key={p} className="chip" onClick={() => { setEventInput(p); generateEventScene(p); }}
@@ -525,6 +553,15 @@ export default function StudioPage() {
                 <button className="btn-primary w-full" onClick={animate} disabled={animating}>
                   {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (5s video)</>}
                 </button>
+                {(animating || videoUrl) && (
+                  <div className="mt-2">
+                    <ProgressBar
+                      status={animating ? "running" : "complete"}
+                      estimatedSeconds={75}
+                      label="Rendering video"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="surface p-5 space-y-2">
