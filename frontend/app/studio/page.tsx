@@ -8,7 +8,6 @@ import {
   Sparkles, MapPin, Film, Loader2, Save, ArrowLeftRight, Shirt, AlertCircle, Share2,
   User as UserIcon, RefreshCw, Upload,
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { GeneratingState } from "@/components/studio/GeneratingState";
 import { ShareToFriendModal } from "@/components/ShareToFriendModal";
@@ -18,7 +17,6 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
-import { useSeenOnce } from "@/lib/useSeenOnce";
 import type { WardrobeItem } from "@/types";
 
 const EVENT_PRESETS = [
@@ -54,7 +52,6 @@ export default function StudioPage() {
   const [showFacePicker, setShowFacePicker] = useState(false);
   const [customFaceUrl, setCustomFaceUrl] = useState("");
   const [uploadingFace, setUploadingFace] = useState(false);
-  const taskHintSeen = useSeenOnce("studio-task-hint");
 
   async function handleFaceUpload(file: File) {
     setUploadingFace(true);
@@ -190,12 +187,6 @@ export default function StudioPage() {
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0">
-        <PageHeader
-          eyebrow="The atelier"
-          tutorialKey="studio"
-          subtitle="Mix pieces from your closet, see them on you instantly, then bring them to life."
-        />
-
         {!avatarSelfieUrl && (
           <div className="surface p-5 mb-6 flex items-start gap-3" style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}>
             <AlertCircle size={18} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
@@ -218,9 +209,6 @@ export default function StudioPage() {
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6">
         <div className="lg:col-span-3">
-          <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            Your wardrobe
-          </div>
           <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-2 lg:overflow-y-auto lg:overflow-x-visible lg:max-h-[600px] lg:pr-1 lg:pb-0">
             {items.map((it) => {
               const sel = selectedItemIds.includes(it.id);
@@ -284,42 +272,13 @@ export default function StudioPage() {
               <div className="surface overflow-hidden relative"
                    style={{ width: "100%", maxWidth: 360, aspectRatio: "3/4" }}>
                 {(stylizedAvatarUrl || effectiveSelfieUrl) ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={stylizedAvatarUrl || effectiveSelfieUrl!}
-                      alt="Your starting point"
-                      className="w-full h-full object-cover"
-                      style={{ filter: stylizedAvatarUrl ? "brightness(0.7)" : "brightness(0.55) saturate(0.9)" }}
-                    />
-                    <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 px-4 text-center">
-                      {stylizedAvatarStatus === "generating" && (
-                        <div
-                          className="flex items-center gap-2 px-3 py-1 rounded-full mb-2"
-                          style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)" }}
-                        >
-                          <Loader2 size={11} className="spin" style={{ color: "var(--gold)" }} />
-                          <span style={{ color: "var(--gold)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                            Stylizing your avatar...
-                          </span>
-                        </div>
-                      )}
-                      <div
-                        className="px-3 py-1 rounded-full mb-2"
-                        style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)", color: "var(--gold)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase" }}
-                      >
-                        {stylizedAvatarUrl ? "Your editorial avatar" : "Your starting point"}
-                      </div>
-                      <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                        Pick items + click Generate
-                      </div>
-                      {!taskHintSeen && (
-                        <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                          You can navigate away — task keeps running
-                        </div>
-                      )}
-                    </div>
-                  </>
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={stylizedAvatarUrl || effectiveSelfieUrl!}
+                    alt="Your starting point"
+                    className="w-full h-full object-cover"
+                    style={{ filter: stylizedAvatarUrl ? "brightness(0.85)" : "brightness(0.7) saturate(0.9)" }}
+                  />
                 ) : (
                   <div className="flex items-center justify-center h-full text-center px-4" style={{ color: "var(--text-dim)" }}>
                     <div>
@@ -456,9 +415,6 @@ export default function StudioPage() {
           </div>
 
           <div className="surface p-5">
-            <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-              Selected ({selectedItems.length}/6)
-            </div>
             {selectedItems.length === 0 ? (
               <p className="text-xs mb-3" style={{ color: "var(--text-dim)" }}>None yet.</p>
             ) : (
