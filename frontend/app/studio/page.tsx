@@ -261,7 +261,7 @@ export default function StudioPage() {
 
         <div className="col-span-6">
           {generating ? (
-            <GeneratingState avatarUrl={avatarSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} />
+            <GeneratingState avatarUrl={effectiveSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} />
           ) : resultUrl ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
