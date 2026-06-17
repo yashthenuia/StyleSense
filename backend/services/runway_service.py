@@ -30,6 +30,27 @@ if not _API_KEY:
 client = RunwayML(api_key=_API_KEY)
 
 
+# ───────────────────────────── MODEL ALLOWLISTS ───────────────────────────── #
+# Mirrors frontend/lib/models.ts. Used to validate a user-selected model id and
+# fall back to the default rather than passing an unknown/mismatched id to Runway.
+
+TRYON_MODELS = {"gen4_image", "gen4_image_turbo", "gemini_image3_pro", "gpt_image_2", "gemini_2.5_flash"}
+VIDEO_MODELS = {"veo3.1", "veo3.1_fast", "seedance2", "seedance2_fast", "gen4.5"}
+
+DEFAULT_TRYON_MODEL = "gen4_image"
+DEFAULT_VIDEO_MODEL = "veo3.1"
+
+
+def valid_tryon_model(model: str | None) -> str:
+    """Return a valid try-on model id, defaulting if missing/unknown."""
+    return model if model in TRYON_MODELS else DEFAULT_TRYON_MODEL
+
+
+def valid_video_model(model: str | None) -> str:
+    """Return a valid video model id, defaulting if missing/unknown."""
+    return model if model in VIDEO_MODELS else DEFAULT_VIDEO_MODEL
+
+
 # ───────────────────────────── PROMPTS ───────────────────────────── #
 # Cinematic editorial style prompts. Specific descriptors >>> generic ones.
 
@@ -241,6 +262,46 @@ def runway_generate_multi_tryon(
         raise RuntimeError("Multi-tryon timed out (5 minutes)")
 
 
+# ───────────────────────────── FACE RESTORE ───────────────────────────── #
+
+PROMPT_FACE_RESTORE = (
+    "Editorial fashion photograph identical to @subject in every way - same outfit, "
+    "same pose, same body, same background, same lighting and framing - but restore the "
+    "exact facial identity, features, bone structure, eye shape, and skin tone of the "
+    "person in @face. The face must clearly read as the same individual as @face. "
+    "Photorealistic, natural skin texture, sharp focus, magazine quality, 8K. "
+    "Change nothing except locking the face to @face."
+)
+
+
+def runway_restore_face(subject_url: str, face_url: str, model: str = "gen4_image") -> str | None:
+    """
+    Identity-reinforcement second pass: re-render a generated try-on while locking
+    the user's exact face from their selfie. Returns the restored image URL, or None
+    on failure so the caller can keep the original try-on.
+    """
+    try:
+        task = client.text_to_image.create(
+            model=model,
+            prompt_text=PROMPT_FACE_RESTORE,
+            ratio=_to_aspect_ratio(model),
+            reference_images=[
+                {"uri": subject_url, "tag": "subject"},
+                {"uri": face_url, "tag": "face"},
+            ],
+        ).wait_for_task_output(timeout=300)
+        return task.output[0]
+    except TaskFailedError as e:
+        logger.warning(f"Face restore failed: {e.task_details}")
+        return None
+    except TaskTimeoutError:
+        logger.warning("Face restore timed out")
+        return None
+    except Exception as e:
+        logger.warning(f"Face restore error: {type(e).__name__}: {e}")
+        return None
+
+
 # ───────────────────────────── EVENT SCENE ───────────────────────────── #
 
 def runway_event_scene(tryon_url: str, event_context: str) -> dict:
@@ -273,7 +334,8 @@ def runway_animate(
     motion_prompt: str = "",
     model: str = "veo3.1",
     ratio: str = "720:1280",
-    duration: int = 5,
+    duration: int = 6,
+    scene: str | None = None,
 ) -> dict:
     """
     Animate a still image into a short video.
@@ -295,8 +357,15 @@ def runway_animate(
         "The subject moves naturally and confidently — turning slightly toward camera, "
         "shifting weight, gentle hair movement, ambient breeze, alive eyes blinking. "
         "Cinematic depth of field, hyperrealistic motion, smooth fluid camera, "
-        "preserve the background scene and lighting exactly. Fashion editorial film grade, "
-        "magazine quality 8K motion."
+        "Fashion editorial film grade, magazine quality 8K motion."
+    )
+    # Fold an optional scene/background into the prompt and always pin the background
+    # so the placed event scene is retained through the motion.
+    if scene:
+        final_prompt = f"{final_prompt} Set in {scene}."
+    final_prompt = (
+        f"{final_prompt} Preserve the subject's face, outfit, body, the background scene "
+        "and lighting exactly — only add natural motion."
     )
 
     def _duration_for(m: str) -> int:

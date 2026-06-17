@@ -17,7 +17,14 @@ import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { useSeenOnce } from "@/lib/useSeenOnce";
+import { TRYON_MODELS, VIDEO_MODELS } from "@/lib/models";
 import type { WardrobeItem } from "@/types";
+
+const MOTION_PRESETS = [
+  { label: "Slow turn to camera", prompt: "The subject slowly turns toward the camera with a confident editorial pose, gentle hair movement." },
+  { label: "Runway walk", prompt: "The subject walks toward the camera like a fashion runway model, full-body, smooth confident stride." },
+  { label: "Windswept editorial", prompt: "Ambient breeze moves the hair and fabric, the subject shifts weight subtly, cinematic slow motion." },
+];
 
 const EVENT_PRESETS = [
   "beach wedding, golden hour",
@@ -38,10 +45,15 @@ export default function StudioPage() {
     stylizedAvatarUrl,
     stylizedAvatarStatus,
     setStylized,
+    tryonModel,
+    videoModel,
+    setTryonModel,
+    setVideoModel,
   } = useAppStore();
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [eventInput, setEventInput] = useState("");
+  const [motionPrompt, setMotionPrompt] = useState(MOTION_PRESETS[0].prompt);
   const [showShare, setShowShare] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [quality, setQuality] = useState<"standard" | "pro">("pro");
@@ -149,6 +161,7 @@ export default function StudioPage() {
       avatarSelfieUrl: effectiveSelfieUrl,
       setting: settingInput.trim() || undefined,
       quality,
+      model: tryonModel,
     });
   }
 
@@ -169,6 +182,8 @@ export default function StudioPage() {
       sourceUrl,
       parentTaskId: activeTryOn.id,
       parentTryOnDbId: resultId,
+      model: videoModel,
+      motionPrompt: motionPrompt.trim() || undefined,
     });
   }
 
@@ -255,16 +270,16 @@ export default function StudioPage() {
               className="surface overflow-hidden"
             >
               {videoUrl ? (
-                <video src={videoUrl} controls autoPlay loop className="w-full" style={{ aspectRatio: "3/4" }} />
+                <video src={videoUrl} controls autoPlay loop className="w-full" style={{ aspectRatio: "9/16", objectFit: "contain", background: "var(--surface2)" }} />
               ) : showCompare && (stylizedAvatarUrl || avatarSelfieUrl) ? (
                 <ReactCompareSlider
                   itemOne={<ReactCompareSliderImage src={stylizedAvatarUrl || avatarSelfieUrl!} alt="Before" />}
                   itemTwo={<ReactCompareSliderImage src={resultUrl} alt="After" />}
-                  style={{ aspectRatio: "3/4" }}
+                  style={{ aspectRatio: "9/16" }}
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={eventUrl || resultUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
+                <img src={eventUrl || resultUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "9/16", objectFit: "contain", background: "var(--surface2)" }} />
               )}
             </motion.div>
           ) : (
@@ -464,14 +479,15 @@ export default function StudioPage() {
               </div>
             )}
 
-            <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Quality</div>
-            <div className="flex gap-1 mb-3">
-              <button className={`chip flex-1 justify-center ${quality === "standard" ? "chip-active" : ""}`}
-                      onClick={() => setQuality("standard")} style={{ fontSize: "0.7rem" }}
-                      title="Faster">Standard</button>
-              <button className={`chip flex-1 justify-center ${quality === "pro" ? "chip-active" : ""}`}
-                      onClick={() => setQuality("pro")} style={{ fontSize: "0.7rem" }}
-                      title="Best quality">Pro ✦</button>
+            <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Try-on model</div>
+            <select className="input mb-1" value={tryonModel} onChange={(e) => setTryonModel(e.target.value)}
+                    style={{ fontSize: "0.85rem" }}>
+              {TRYON_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
+              ))}
+            </select>
+            <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
+              {TRYON_MODELS.find((m) => m.id === tryonModel)?.blurb}
             </div>
 
             <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
@@ -521,9 +537,40 @@ export default function StudioPage() {
               </div>
 
               <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate</div>
+                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate your current scene</div>
+                {eventUrl && (
+                  <div className="text-[11px] mb-2" style={{ color: "var(--gold)" }}>
+                    Using placed scene: {eventInput || "current scene"}
+                  </div>
+                )}
+
+                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Video model</div>
+                <select className="input mb-1" value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
+                        style={{ fontSize: "0.85rem" }}>
+                  {VIDEO_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
+                  ))}
+                </select>
+                <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
+                  {VIDEO_MODELS.find((m) => m.id === videoModel)?.blurb}
+                </div>
+
+                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Motion</div>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {MOTION_PRESETS.map((p) => (
+                    <button key={p.label} className={`chip ${motionPrompt === p.prompt ? "chip-active" : ""}`}
+                            onClick={() => setMotionPrompt(p.prompt)} disabled={animating}
+                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <input className="input mb-3" placeholder="Describe the motion (optional)"
+                       value={motionPrompt} onChange={(e) => setMotionPrompt(e.target.value)}
+                       style={{ fontSize: "0.8rem" }} disabled={animating} />
+
                 <button className="btn-primary w-full" onClick={animate} disabled={animating}>
-                  {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (5s video)</>}
+                  {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (6s video)</>}
                 </button>
               </div>
 

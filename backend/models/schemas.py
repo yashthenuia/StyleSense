@@ -39,6 +39,8 @@ class EventSceneRequest(BaseModel):
 class AnimateRequest(BaseModel):
     image_url: str
     motion_prompt: str = "Person slowly turning, confident fashion model pose, smooth movement"
+    scene: Optional[str] = None  # Optional scene/background folded into the motion prompt
+    model: Optional[str] = None  # Video model id; validated + defaulted server-side
     tryon_result_id: Optional[str] = None
 
 

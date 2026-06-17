@@ -1,4 +1,5 @@
 """Try-on, event scene, and animation endpoints."""
+import os
 from fastapi import APIRouter, HTTPException, Depends
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
@@ -10,10 +11,25 @@ from services.auth_service import current_user
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=4)
 
+# Optional identity-reinforcement pass after a try-on. Off by default (adds ~5cr +
+# ~30s per generation). Enable with FACE_RESTORE=1 in the backend env.
+FACE_RESTORE = os.getenv("FACE_RESTORE", "0") == "1"
+
 
 async def _run_blocking(fn, *args, **kwargs):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
+
+
+async def _maybe_restore_face(subject_url: str, face_url: str | None) -> str:
+    """Lock the user's face onto the try-on when FACE_RESTORE is enabled.
+    Falls back to the original try-on if disabled or if the pass fails."""
+    if not FACE_RESTORE or not face_url:
+        return subject_url
+    restored = await _run_blocking(
+        runway_service.runway_restore_face, subject_url=subject_url, face_url=face_url
+    )
+    return restored or subject_url
 
 
 async def _rehost(user_id: str, runway_url: str) -> str:
@@ -44,13 +60,14 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
             item_url=req.item_image_url,
             item_name=req.item_name,
             item_category=req.item_category,
-            model=req.model,
+            model=runway_service.valid_tryon_model(req.model),
             setting=req.setting,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
-    image_url = await _rehost(user["id"], result["image_url"])
+    restored = await _maybe_restore_face(result["image_url"], req.avatar_selfie_url)
+    image_url = await _rehost(user["id"], restored)
 
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
@@ -80,7 +97,7 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
             runway_service.runway_generate_multi_tryon,
             avatar_url=req.avatar_selfie_url,
             items=req.items,
-            model=req.model,
+            model=runway_service.valid_tryon_model(req.model),
             setting=req.setting,
             storage_uploader=supabase_service.upload_to_storage,
             user_id=user["id"],
@@ -88,7 +105,8 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
-    image_url = await _rehost(user["id"], result["image_url"])
+    restored = await _maybe_restore_face(result["image_url"], req.avatar_selfie_url)
+    image_url = await _rehost(user["id"], restored)
 
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
@@ -134,6 +152,8 @@ async def animate(req: AnimateRequest, user = Depends(current_user)):
             runway_service.runway_animate,
             image_url=req.image_url,
             motion_prompt=req.motion_prompt,
+            model=runway_service.valid_video_model(req.model),
+            scene=req.scene,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))

@@ -68,6 +68,7 @@ interface State {
     avatarSelfieUrl: string;
     setting?: string;
     quality: "standard" | "pro";
+    model?: string;   // explicit try-on model id; overrides quality mapping
   }) => string;
   startEventScene: (input: {
     parentTaskId: string;       // in-memory store task id (NOT DB id)
@@ -79,6 +80,9 @@ interface State {
     sourceUrl: string;
     parentTaskId?: string;       // in-memory store task id
     parentTryOnDbId?: string;    // DB id for backend persistence
+    model?: string;              // video model id
+    motionPrompt?: string;       // user-chosen motion description
+    scene?: string;              // optional scene/background hint
   }) => string;
   clearDone: () => void;
   remove: (id: string) => void;
@@ -107,7 +111,7 @@ export const useTasks = create<State>((set, get) => ({
     };
     set((s) => ({ tasks: [...s.tasks.filter((t) => t.kind !== "tryon" || t.status !== "running"), task] }));
 
-    const model = input.quality === "pro" ? "gen4_image" : "gen4_image_turbo";
+    const model = input.model ?? (input.quality === "pro" ? "gen4_image" : "gen4_image_turbo");
     const setting = input.setting?.trim() || undefined;
     const promise = input.items.length === 1
       ? apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate", {
@@ -196,6 +200,9 @@ export const useTasks = create<State>((set, get) => ({
     apiPost<{ video_url: string }>("/api/tryon/animate", {
       image_url: input.sourceUrl,
       tryon_result_id: input.parentTryOnDbId,
+      model: input.model,
+      motion_prompt: input.motionPrompt,
+      scene: input.scene,
     })
       .then((res) => {
         update<AnimateTask>(set, id, {
