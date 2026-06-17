@@ -226,7 +226,7 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
       .channel(`chat:${user.id}:${otherId}`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
-        async (payload) => {
+        async (payload: { new: MessageRow }) => {
           const m = payload.new as MessageRow;
           // Filter to only our pair
           const ourPair =

@@ -191,7 +191,7 @@ export default function WardrobePage() {
         description={pendingDelete?.name}
         confirmLabel="Remove"
         destructive
-        onConfirm={() => pendingDelete && performDelete(pendingDelete.id)}
+        onConfirm={() => { if (pendingDelete) performDelete(pendingDelete.id); }}
       />
     </div>
   );

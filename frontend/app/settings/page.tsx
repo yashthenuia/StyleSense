@@ -10,7 +10,7 @@ import { toast } from "@/components/ui/Toast";
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
-  const { avatarSelfieUrl, avatarHeroVideoUrl, setSelfieOnly } = useAppStore();
+  const { avatarSelfieUrl, stylizedVideoUrl, setSelfieOnly } = useAppStore();
   const [uploading, setUploading] = useState(false);
 
   async function handleUpload(file: File) {
@@ -62,7 +62,7 @@ export default function SettingsPage() {
         <div className="flex items-start gap-6">
           <SelfieDropzone onFile={handleUpload} loading={uploading} preview={avatarSelfieUrl} />
 
-          {avatarHeroVideoUrl && (
+          {stylizedVideoUrl && (
             <div className="flex-1">
               <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
                 Your avatar video
@@ -72,7 +72,7 @@ export default function SettingsPage() {
                 style={{ width: 220, height: 140, background: "var(--surface2)" }}
               >
                 <video
-                  src={avatarHeroVideoUrl}
+                  src={stylizedVideoUrl}
                   autoPlay
                   loop
                   muted

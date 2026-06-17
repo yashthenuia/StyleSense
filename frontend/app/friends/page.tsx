@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import {
   Search, UserPlus, Check, X, Users, Loader2, Copy, MessagesSquare,
@@ -254,7 +254,7 @@ export default function FriendsPage() {
         description={pendingRemove?.other.full_name || pendingRemove?.other.email || undefined}
         confirmLabel="Remove"
         destructive
-        onConfirm={() => pendingRemove && performRemove(pendingRemove.friendship_id)}
+        onConfirm={() => { if (pendingRemove) performRemove(pendingRemove.friendship_id); }}
       />
     </div>
   );

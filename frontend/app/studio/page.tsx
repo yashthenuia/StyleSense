@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import {
   Sparkles, MapPin, Film, Loader2, Save, ArrowLeftRight, Shirt, AlertCircle, Share2,
@@ -87,7 +87,7 @@ export default function StudioPage() {
 
   // Other ongoing operations - simple booleans derived from store
   const eventLoading = useTasks((s) =>
-    s.tasks.some((t) => t.kind === "event" && t.status === "running" && t.parentTryOnId === resultId)
+    s.tasks.some((t) => t.kind === "event" && t.status === "running" && t.parentTryOnDbId === resultId)
   );
   const animating = useTasks((s) =>
     s.tasks.some((t) => t.kind === "animate" && t.status === "running")
