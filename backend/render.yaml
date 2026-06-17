@@ -1,0 +1,40 @@
+# Render Blueprint for the StyleAI FastAPI backend.
+# Deploy: Render Dashboard -> New -> Blueprint -> point at this repo.
+# Secrets (sync: false) are NOT stored in git -- you paste them in the
+# Render dashboard once, matching the values in backend/.env.
+services:
+  - type: web
+    name: styleai-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Pin to 3.12 -- rembg/onnxruntime have no 3.13 wheel (see requirements.txt)
+      - key: PYTHON_VERSION
+        value: 3.12.9
+
+      # --- Secrets: set these in the Render dashboard (copy from backend/.env) ---
+      - key: RUNWAY_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: RUNWAY_DEFAULT_VOICE_ID
+        sync: false
+      - key: STYLIST_CHARACTER_ID
+        sync: false
+      - key: STYLIST_HERO_VIDEO_URL
+        sync: false
+
+      # Your Vercel frontend URL -- drives CORS in main.py. Set after frontend deploy.
+      - key: FRONTEND_URL
+        sync: false

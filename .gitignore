@@ -28,3 +28,8 @@ Thumbs.db
 # Test artifacts
 backend/tests/output/
 *.log
+
+# Local dev helper scripts (not for deploy)
+backend/start_backend.ps1
+backend/test_startup.py
+frontend/start_frontend.ps1
