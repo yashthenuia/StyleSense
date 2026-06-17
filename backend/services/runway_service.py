@@ -34,8 +34,12 @@ client = RunwayML(api_key=_API_KEY)
 # Mirrors frontend/lib/models.ts. Used to validate a user-selected model id and
 # fall back to the default rather than passing an unknown/mismatched id to Runway.
 
-TRYON_MODELS = {"gen4_image", "gen4_image_turbo", "gemini_image3_pro", "gpt_image_2", "gemini_2.5_flash"}
-VIDEO_MODELS = {"veo3.1", "veo3.1_fast", "seedance2", "seedance2_fast", "gen4.5"}
+# Limited to models the installed runwayml SDK (4.4.0) actually supports.
+# Newer API models (gemini_image3_pro, gpt_image_2, seedance2) require an SDK
+# upgrade (>=5.x) and Runway plan access, otherwise the task never starts and
+# wait_for_task_output polls until timeout.
+TRYON_MODELS = {"gen4_image", "gen4_image_turbo", "gemini_2.5_flash"}
+VIDEO_MODELS = {"veo3.1", "veo3.1_fast", "gen4_turbo"}
 
 DEFAULT_TRYON_MODEL = "gen4_image"
 DEFAULT_VIDEO_MODEL = "veo3.1"
@@ -341,8 +345,8 @@ def runway_animate(
     Animate a still image into a short video.
 
     Default model is veo3.1 - Runway's most realistic image-to-video offering
-    (re-routed from Google Veo). Better motion + scene fidelity than gen4.5.
-    Falls back to gen4.5 automatically if veo3.1 fails.
+    (re-routed from Google Veo). Falls back to gen4_turbo automatically if the
+    chosen model fails (both are supported by the installed SDK).
 
     Args:
         ratio: Runway aspect ratio string. Common values: "720:1280" (portrait,
@@ -369,8 +373,10 @@ def runway_animate(
     )
 
     def _duration_for(m: str) -> int:
-        # veo3.1 only allows {4, 6, 8}; gen4.5 accepts 5
-        if m == "veo3.1" and duration == 5:
+        # veo models allow {4, 6, 8}; gen4_turbo/gen3a_turbo allow {5, 10}.
+        if m in ("gen4_turbo", "gen3a_turbo"):
+            return 5 if duration < 10 else 10
+        if m.startswith("veo") and duration not in (4, 6, 8):
             return 6
         return duration
 
@@ -392,15 +398,15 @@ def runway_animate(
             "prompt_used": final_prompt,
         }
     except TaskFailedError as e:
-        # Newer models can be flaky / capacity-constrained. Fall back to gen4.5.
-        if model != "gen4.5":
-            logger.warning(f"{model} failed ({e.task_details}); falling back to gen4.5")
+        # Newer models can be flaky / capacity-constrained. Fall back to gen4_turbo.
+        if model != "gen4_turbo":
+            logger.warning(f"{model} failed ({e.task_details}); falling back to gen4_turbo")
             try:
-                task = _try("gen4.5")
+                task = _try("gen4_turbo")
                 return {
                     "video_url": task.output[0],
                     "task_id": task.id,
-                    "model_used": "gen4.5 (fallback)",
+                    "model_used": "gen4_turbo (fallback)",
                     "prompt_used": final_prompt,
                 }
             except TaskFailedError as e2:
@@ -410,14 +416,14 @@ def runway_animate(
         raise RuntimeError("Animation timed out")
     except Exception as e:
         # Likely a model-not-available error for newer models; auto-fall-back
-        if model != "gen4.5":
-            logger.warning(f"{model} not available ({e}); falling back to gen4.5")
+        if model != "gen4_turbo":
+            logger.warning(f"{model} not available ({e}); falling back to gen4_turbo")
             try:
-                task = _try("gen4.5")
+                task = _try("gen4_turbo")
                 return {
                     "video_url": task.output[0],
                     "task_id": task.id,
-                    "model_used": "gen4.5 (fallback)",
+                    "model_used": "gen4_turbo (fallback)",
                     "prompt_used": final_prompt,
                 }
             except Exception as e2:

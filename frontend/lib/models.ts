@@ -12,11 +12,11 @@ export interface ModelOption {
 }
 
 // Try-on / image generation models. gen4_image is the default.
+// Limited to models supported by the installed runwayml SDK (4.4.0). Newer
+// models (gemini_image3_pro, gpt_image_2, seedance2) need an SDK upgrade.
 export const TRYON_MODELS: ModelOption[] = [
   { id: "gen4_image_turbo", label: "Gen-4 Turbo", blurb: "Fast & cheap draft quality", tier: "fast" },
   { id: "gen4_image", label: "Gen-4", blurb: "Balanced default quality", tier: "standard" },
-  { id: "gemini_image3_pro", label: "Gemini 3 Pro", blurb: "Best identity, many references", tier: "premium" },
-  { id: "gpt_image_2", label: "GPT Image 2", blurb: "Strong prompt control", tier: "premium" },
   { id: "gemini_2.5_flash", label: "Gemini 2.5 Flash", blurb: "Quick image generation", tier: "fast" },
 ];
 
@@ -24,9 +24,7 @@ export const TRYON_MODELS: ModelOption[] = [
 export const VIDEO_MODELS: ModelOption[] = [
   { id: "veo3.1", label: "Veo 3.1", blurb: "Realistic default motion", tier: "standard" },
   { id: "veo3.1_fast", label: "Veo 3.1 Fast", blurb: "Faster, lower cost", tier: "fast" },
-  { id: "seedance2", label: "Seedance 2.0", blurb: "Consistent character motion", tier: "premium" },
-  { id: "seedance2_fast", label: "Seedance 2.0 Fast", blurb: "Faster Seedance", tier: "standard" },
-  { id: "gen4.5", label: "Gen-4.5", blurb: "Runway native fallback", tier: "standard" },
+  { id: "gen4_turbo", label: "Gen-4 Turbo", blurb: "Runway native motion", tier: "standard" },
 ];
 
 export const DEFAULT_TRYON_MODEL = "gen4_image";
