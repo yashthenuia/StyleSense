@@ -56,7 +56,6 @@ export default function WardrobePage() {
     <div className="h-full flex flex-col">
       <div className="shrink-0">
         <PageHeader
-          eyebrow="Your closet"
           tutorialKey="wardrobe"
           subtitle="Add items by photo upload or product URL. Select up to 2 items, then open Studio to try them on."
           action={
@@ -116,7 +115,7 @@ export default function WardrobePage() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: i * 0.03 }}
                   className="surface surface-hover overflow-hidden cursor-pointer relative group"
-                  style={{ borderColor: selected ? "var(--gold)" : undefined }}
+                  style={{ borderRadius: 12, background: "#fff", borderColor: selected ? "var(--ink)" : undefined }}
                   onClick={() => toggleSelected(item.id)}
                 >
                   <div className="relative w-full aspect-[3/4]">
@@ -131,26 +130,21 @@ export default function WardrobePage() {
                   {selected && (
                     <div
                       className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs"
-                      style={{ background: "var(--gold)", color: "var(--on-gold)" }}
+                      style={{ background: "var(--ink)", color: "var(--parchment)" }}
                     >
                       {selectedItemIds.indexOf(item.id) + 1}
                     </div>
                   )}
-                  <div className="px-4 py-3">
+                  <div className="px-4 py-3 flex items-center justify-between gap-2">
                     <div className="text-sm truncate" title={item.name}>{item.name}</div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs" style={{ color: "var(--text-dim)" }}>
-                        {item.category}{item.color ? ` · ${item.color}` : ""}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition"
-                        style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
-                        onClick={(e) => { e.stopPropagation(); setPendingDelete(item); }}
-                        aria-label="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+                      style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); setPendingDelete(item); }}
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </motion.div>
               );
@@ -166,7 +160,7 @@ export default function WardrobePage() {
           style={{ transform: "translateX(-50%)", zIndex: 50, boxShadow: "0 12px 40px -12px rgba(0,0,0,0.7)" }}
         >
           <span className="text-sm">
-            <strong style={{ color: "var(--gold)" }}>{selectedItemIds.length}</strong> selected
+            <strong style={{ color: "var(--text)" }}>{selectedItemIds.length}</strong> selected
             {selectedItemIds.length >= 6 && <span style={{ color: "var(--text-muted)" }}> (max)</span>}
           </span>
           <button className="btn-secondary" onClick={clearSelected} style={{ padding: "0.4rem 0.9rem" }}>
@@ -195,7 +189,7 @@ export default function WardrobePage() {
         description={pendingDelete?.name}
         confirmLabel="Remove"
         destructive
-        onConfirm={() => pendingDelete && performDelete(pendingDelete.id)}
+        onConfirm={() => { if (pendingDelete) performDelete(pendingDelete.id); }}
       />
     </div>
   );
@@ -230,7 +224,7 @@ function AddItemModal({
   const [submitting, setSubmitting] = useState(false);
 
   // Multi-item review state
-  const [phase, setPhase] = useState<"form" | "detecting" | "checklist">("form");
+  const [phase, setPhase] = useState<"form" | "detecting" | "adding" | "checklist">("form");
   const [detected, setDetected] = useState<DetectedItem[]>([]);
   const [detectedSourceUrl, setDetectedSourceUrl] = useState<string | null>(null);
 
@@ -302,7 +296,9 @@ function AddItemModal({
         return;
       }
       if (res.detected.length === 1) {
-        // Single-item path: re-upload via existing /upload using detection to fill blanks
+        // Single-item path: re-upload via existing /upload using detection to fill blanks.
+        // Switch the loader copy so it reflects the second call instead of staying on "Analyzing...".
+        setPhase("adding");
         const d = res.detected[0];
         const fd2 = new FormData();
         fd2.append("file", file);
@@ -370,10 +366,20 @@ function AddItemModal({
       >
         {phase === "detecting" && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--gold)" }} />
+            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--text-muted)" }} />
             <h2 className="font-display text-2xl mb-1">Analyzing your photo...</h2>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               Looking for individual clothing items.
+            </p>
+          </div>
+        )}
+
+        {phase === "adding" && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--gold)" }} />
+            <h2 className="font-display text-2xl mb-1">Adding to your closet...</h2>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Cleaning up the garment and saving it.
             </p>
           </div>
         )}
@@ -542,9 +548,9 @@ function DetectedItemsChecklist({
               onClick={() => update(i, { checked: !r.checked })}
               className="w-6 h-6 rounded flex items-center justify-center mt-1 flex-shrink-0"
               style={{
-                background: r.checked ? "var(--gold)" : "var(--surface2)",
-                border: `1px solid ${r.checked ? "var(--gold)" : "var(--border)"}`,
-                color: r.checked ? "var(--on-gold)" : "var(--text-dim)",
+                background: r.checked ? "var(--ink)" : "var(--surface2)",
+                border: `1px solid ${r.checked ? "var(--ink)" : "var(--border)"}`,
+                color: r.checked ? "var(--parchment)" : "var(--text-dim)",
                 cursor: "pointer",
               }}
               aria-label={r.checked ? "Uncheck" : "Check"}

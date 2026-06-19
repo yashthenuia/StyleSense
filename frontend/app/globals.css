@@ -1,36 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Backgrounds — layered editorial cream surfaces */
+  color-scheme: light;
+
+  /* Backgrounds — warm cream */
   --bg:        #f7f1ea;
-  --surface:   #ffffff;
+  --surface:   #f7f1ea;
   --surface2:  #f0e9df;
   --surface3:  #e6dcce;
 
-  /* Borders — warm tan with stronger visibility */
-  --border:       #d4c4b8;
-  --border-hover: #c9b8a8;
-  --border-gold:  #d4c4b8;
+  /* Borders — warm brown at low opacity */
+  --border:       rgba(81, 50, 41, 0.12);
+  --border-hover: rgba(81, 50, 41, 0.35);
+  --border-gold:  rgba(81, 50, 41, 0.12);
 
   /* Text */
-  --text:       #2a221a;
-  --text-muted: #7a6a55;
-  --text-dim:   #b3a690;
+  --text:       #3d1f14;
+  --text-muted: #7a5a4a;
+  --text-dim:   #b89882;
 
-  /* Brand warm tan/gold */
-  --gold:       #daa520;
-  --gold-light: #e8b44f;
-  --gold-dim:   rgba(218, 165, 32, 0.14);
-  --gold-glow:  rgba(218, 165, 32, 0.28);
+  /* Brand accent — muted parchment */
+  --gold:       #D7D4B1;
+  --gold-light: #E2DEC8;
+  --gold-dim:   rgba(215, 212, 177, 0.25);
+  --gold-glow:  rgba(215, 212, 177, 0.40);
   --on-gold:    #1a1410;  /* dark text on light gold backgrounds */
 
   /* Refined Minimal Outline palette */
-  --ink:       #301c10;   /* deep espresso — border + text for action elements */
-  --parchment: #eae4da;   /* warm off-white — active chip/tab fill */
+  --ink:       #513229;   /* exact brand brown */
+  --parchment: #D7D4B1;   /* active chip/tab fill */
 
   /* Accents */
   --purple: #8b6fe8;
@@ -39,11 +41,11 @@
   --green:  #6b8e5f;
   --red:    #e85c5c;
 
-  /* Radii — boxy aesthetic for surfaces, rounded for interactive elements */
-  --radius-sm: 0px;
-  --radius:    0px;
-  --radius-lg: 0px;
-  --radius-btn: 0.75rem; /* rounded-xl for buttons and chips */
+  /* Radii */
+  --radius-sm:  8px;
+  --radius:     12px;
+  --radius-lg:  16px;
+  --radius-btn: 0.75rem;
 }
 
 * { box-sizing: border-box; }
@@ -70,7 +72,7 @@ html, body {
 
 .surface {
   background: var(--surface);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -119,7 +121,7 @@ html, body {
   width: 100%;
   transition: border-color 0.15s;
 }
-.input:focus { outline: none; border-color: var(--gold); }
+.input:focus { outline: none; border-color: var(--ink); }
 .input::placeholder { color: var(--text-dim); }
 
 .label {

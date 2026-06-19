@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, MessagesSquare, Loader2, Sparkles, Image as ImageIcon, Layers, Users,
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -98,28 +97,17 @@ function ChatInner() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="shrink-0">
-        <PageHeader
-          eyebrow="Direct messages"
-          tutorialKey="chat"
-          subtitle="Talk to your friends. Share outfits and try-ons. Get a second opinion."
-        />
-      </div>
-
       <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
         {/* LEFT: thread list */}
         <div className="col-span-4 surface flex flex-col min-h-0">
           <div className="px-5 py-4 shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
-              Your conversations
-            </div>
-            <div className="font-display text-xl">All chats</div>
+            <div className="font-display text-xl">Messages</div>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto">
             {threads.length === 0 ? (
               <div className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 <Users size={24} className="mx-auto mb-2" style={{ color: "var(--text-dim)" }} />
-                No chats yet. <Link href="/friends" style={{ color: "var(--gold)" }}>Add a friend</Link> to start.
+                No chats yet. <Link href="/friends" style={{ color: "var(--text)", textDecoration: "underline" }}>Add a friend</Link> to start.
               </div>
             ) : (
               threads.map((t) => (
@@ -142,7 +130,7 @@ function ChatInner() {
             <div className="flex items-center justify-center h-full text-sm" style={{ color: "var(--text-muted)" }}>
               <div className="text-center">
                 <MessagesSquare size={32} className="mx-auto mb-2" style={{ color: "var(--text-dim)" }} />
-                Pick a chat from the left, or <Link href="/friends" style={{ color: "var(--gold)" }}>find a friend</Link>.
+                Pick a chat from the left, or <Link href="/friends" style={{ color: "var(--text)", textDecoration: "underline" }}>find a friend</Link>.
               </div>
             </div>
           )}
@@ -163,8 +151,9 @@ function ThreadCard({ thread, active, onClick }: { thread: ThreadRow; active: bo
       onClick={onClick}
       className="w-full px-4 py-3 flex items-center gap-3 text-left transition"
       style={{
-        background: active ? "var(--gold-dim)" : "transparent",
+        background: active ? "var(--surface2)" : "transparent",
         border: "none", borderBottom: "1px solid var(--border)",
+        borderLeft: active ? "3px solid var(--gold)" : "3px solid transparent",
         cursor: "pointer", color: "var(--text)",
       }}
     >
@@ -184,7 +173,7 @@ function ThreadCard({ thread, active, onClick }: { thread: ThreadRow; active: bo
         {thread.unread > 0 && (
           <span
             className="text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center"
-            style={{ background: "var(--gold)", color: "var(--on-gold)" }}
+            style={{ background: "var(--ink)", color: "var(--parchment)" }}
           >
             {thread.unread}
           </span>
@@ -267,9 +256,8 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
         <Avatar name={other?.full_name || other?.email || "?"} />
-        <div className="flex-1">
-          <div className="font-display text-xl">{other?.full_name || other?.email || "..."}</div>
-          <div className="text-xs" style={{ color: "var(--text-muted)" }}>{other?.email}</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-xl truncate">{other?.full_name || other?.email || "..."}</div>
         </div>
       </div>
 
@@ -330,7 +318,7 @@ function ChatThread({ otherId, onMessageSent }: { otherId: string; onMessageSent
           </button>
           <input
             className="input"
-            placeholder="Type a message..."
+            placeholder="Type structured message..."
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
@@ -359,9 +347,11 @@ function Bubble({ m, mine, onOpenTryOn, onOpenOutfit, onOpenImage }: {
       <div
         className="max-w-[75%] rounded-[14px] px-4 py-2.5"
         style={{
-          background: mine ? "var(--gold-dim)" : "var(--surface2)",
-          border: mine ? "1px solid var(--border-gold)" : "1px solid var(--border)",
-          color: "var(--text)",
+          background: mine ? "var(--ink)" : "var(--surface2)",
+          border: mine ? "1px solid var(--ink)" : "1px solid var(--border)",
+          color: mine ? "var(--parchment)" : "var(--text)",
+          fontFamily: mine ? "'JetBrains Mono', ui-monospace, monospace" : undefined,
+          fontSize: mine ? "0.85rem" : undefined,
         }}
       >
         {/* Attached outfit - click to open */}
@@ -376,9 +366,9 @@ function Bubble({ m, mine, onOpenTryOn, onOpenOutfit, onOpenImage }: {
               <img src={m.outfit.preview_image_url} alt={m.outfit.name} style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover" }} />
             )}
             <div className="px-3 py-2 flex items-center gap-2 text-xs">
-              <Layers size={12} style={{ color: "var(--gold)" }} />
+              <Layers size={12} style={{ color: "var(--text-muted)" }} />
               <span style={{ color: "var(--text)" }}>{m.outfit.name}</span>
-              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--gold)" }}>View →</span>
+              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--text-muted)" }}>View →</span>
             </div>
           </button>
         )}
@@ -396,9 +386,9 @@ function Bubble({ m, mine, onOpenTryOn, onOpenOutfit, onOpenImage }: {
               <img src={m.tryon.result_image_url} alt="Try-on" style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover" }} />
             )}
             <div className="px-3 py-2 flex items-center gap-2 text-xs">
-              <Sparkles size={12} style={{ color: "var(--gold)" }} />
+              <Sparkles size={12} style={{ color: "var(--text-muted)" }} />
               <span style={{ color: "var(--text)" }}>Try-on</span>
-              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--gold)" }}>View →</span>
+              <span className="ml-auto opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--text-muted)" }}>View →</span>
             </div>
           </button>
         )}
@@ -526,9 +516,9 @@ function Avatar({ name }: { name: string }) {
       className="rounded-full flex items-center justify-center font-semibold text-sm"
       style={{
         width: 38, height: 38,
-        background: "var(--gold-dim)",
-        color: "var(--gold)",
-        border: "1px solid var(--border-gold)",
+        background: "var(--surface3)",
+        color: "var(--text-muted)",
+        border: "1px solid var(--border)",
         flexShrink: 0,
       }}
     >

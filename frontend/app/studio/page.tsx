@@ -9,6 +9,7 @@ import {
   User as UserIcon, RefreshCw, Upload,
 } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { GeneratingState } from "@/components/studio/GeneratingState";
 import { ShareToFriendModal } from "@/components/ShareToFriendModal";
 import { PromptDialog } from "@/components/ui/Dialog";
@@ -81,6 +82,7 @@ export default function StudioPage() {
   const generating = activeTryOn?.status === "running";
   const resultUrl = activeTryOn?.resultUrl;
   const resultId = activeTryOn?.resultId;
+  const nobgUrl = activeTryOn?.nobgUrl;
   const eventUrl = activeTryOn?.eventUrl;
   const videoUrl = activeTryOn?.videoUrl;
 
@@ -187,11 +189,16 @@ export default function StudioPage() {
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0">
+        <PageHeader
+          subtitle="Pick 1 or 2 items from your wardrobe, then generate a try-on on your avatar."
+          tutorialKey="studio"
+        />
+
         {!avatarSelfieUrl && (
-          <div className="surface p-5 mb-6 flex items-start gap-3" style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}>
-            <AlertCircle size={18} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
+          <div className="surface p-5 mb-6 flex items-start gap-3" style={{ background: "var(--surface2)" }}>
+            <AlertCircle size={18} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }} />
             <div className="text-sm">
-              <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--gold)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
+              <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--text)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
             </div>
           </div>
         )}
@@ -200,14 +207,14 @@ export default function StudioPage() {
           <div className="surface p-5 mb-6 flex items-start gap-3">
             <Shirt size={18} style={{ color: "var(--text-dim)", flexShrink: 0, marginTop: 2 }} />
             <div className="text-sm">
-              <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--gold)", textDecoration: "underline" }}>Wardrobe</Link> first.
+              <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--text)", textDecoration: "underline" }}>Wardrobe</Link> first.
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6">
+      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+      <div className="lg:h-full flex flex-col lg:grid lg:grid-cols-12 gap-6">
         <div className="lg:col-span-3">
           <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-2 lg:overflow-y-auto lg:overflow-x-visible lg:max-h-[600px] lg:pr-1 lg:pb-0">
             {items.map((it) => {
@@ -217,7 +224,7 @@ export default function StudioPage() {
                   key={it.id}
                   onClick={() => toggleSelected(it.id)}
                   className="surface overflow-hidden relative flex-shrink-0 w-20 h-20 lg:w-auto lg:h-auto lg:flex-shrink"
-                  style={{ padding: 0, cursor: "pointer", borderColor: sel ? "var(--gold)" : "var(--border)" }}
+                  style={{ padding: 0, cursor: "pointer", background: "#fff", borderColor: sel ? "var(--ink)" : "var(--border)" }}
                   title={it.name}
                 >
                   <div className="relative w-full aspect-square">
@@ -231,7 +238,7 @@ export default function StudioPage() {
                   </div>
                   {sel && (
                     <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                         style={{ background: "var(--gold)", color: "var(--on-gold)" }}>
+                         style={{ background: "var(--ink)", color: "var(--parchment)" }}>
                       {selectedItemIds.indexOf(it.id) + 1}
                     </div>
                   )}
@@ -250,6 +257,10 @@ export default function StudioPage() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="surface overflow-hidden"
+              style={{
+                backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                backgroundSize: "28px 28px",
+              }}
             >
               {videoUrl ? (
                 <video src={videoUrl} controls autoPlay loop className="w-full" style={{ aspectRatio: "3/4" }} />
@@ -259,40 +270,42 @@ export default function StudioPage() {
                   itemTwo={<ReactCompareSliderImage src={resultUrl} alt="After" />}
                   style={{ aspectRatio: "3/4" }}
                 />
-              ) : (
+              ) : eventUrl ? (
+                // Event scene: full Runway-generated background
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={eventUrl || resultUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
+                <img src={eventUrl} alt="Event scene" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
+              ) : nobgUrl ? (
+                // Default post-generate: avatar cutout on grid — grid visible through transparent areas
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={nobgUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "contain" }} />
+              ) : (
+                // Fallback if rembg failed
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resultUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
               )}
             </motion.div>
           ) : (
-            // Compact empty state - prefers the stylized full-body editorial-3D
-            // avatar (auto-generated server-side from the primary selfie). Falls
-            // back to the raw selfie until that finishes.
             <div className="flex justify-center">
               <div className="surface overflow-hidden relative"
-                   style={{ width: "100%", maxWidth: 360, aspectRatio: "3/4" }}>
-                {(stylizedAvatarUrl || effectiveSelfieUrl) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={stylizedAvatarUrl || effectiveSelfieUrl!}
-                    alt="Your starting point"
-                    className="w-full h-full object-cover"
-                    style={{ filter: stylizedAvatarUrl ? "brightness(0.85)" : "brightness(0.7) saturate(0.9)" }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-center px-4" style={{ color: "var(--text-dim)" }}>
-                    <div>
-                      <UserIcon size={28} className="mx-auto mb-2" />
-                      <div className="text-sm">Upload a selfie in <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link> to get started</div>
-                    </div>
+                   style={{
+                     width: "100%", maxWidth: 360, aspectRatio: "3/4",
+                     backgroundColor: "var(--surface)",
+                     backgroundImage:
+                       "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                     backgroundSize: "28px 28px",
+                   }}>
+                <div className="flex items-center justify-center h-full text-center px-4" style={{ color: "var(--text-dim)" }}>
+                  <div>
+                    <UserIcon size={28} className="mx-auto mb-2" />
+                    <div className="text-sm">Select items and generate to see your look</div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        <div className="lg:col-span-3 flex flex-col gap-3">
+        <div className="lg:col-span-3 flex flex-col gap-3 lg:overflow-y-auto">
           {/* FACE picker - shows current selfie + lets user switch */}
           <div className="surface p-5">
             <div className="flex items-center justify-between mb-3">
@@ -302,7 +315,7 @@ export default function StudioPage() {
               <button
                 onClick={() => setShowFacePicker((v) => !v)}
                 className="text-xs flex items-center gap-1"
-                style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
               >
                 <RefreshCw size={11} /> Switch
               </button>
@@ -314,7 +327,7 @@ export default function StudioPage() {
                   src={effectiveSelfieUrl}
                   alt="Active face"
                   className="rounded-full object-cover"
-                  style={{ width: 56, height: 56, border: "2px solid var(--border-gold)" }}
+                  style={{ width: 56, height: 56, border: "2px solid var(--border)" }}
                 />
               ) : (
                 <div className="rounded-full flex items-center justify-center"
@@ -344,7 +357,7 @@ export default function StudioPage() {
                       className="surface overflow-hidden"
                       style={{
                         width: 50, height: 50, padding: 0, cursor: "pointer",
-                        borderColor: url === effectiveSelfieUrl ? "var(--gold)" : undefined,
+                        borderColor: url === effectiveSelfieUrl ? "var(--ink)" : undefined,
                       }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -360,7 +373,7 @@ export default function StudioPage() {
                   style={{ height: 60, borderStyle: "dashed", color: "var(--text-dim)", fontSize: "0.75rem" }}
                 >
                   {uploadingFace ? (
-                    <Loader2 size={16} className="spin" style={{ color: "var(--gold)" }} />
+                    <Loader2 size={16} className="spin" style={{ color: "var(--text-muted)" }} />
                   ) : (
                     <>
                       <Upload size={14} style={{ marginRight: 6 }} />
@@ -405,7 +418,7 @@ export default function StudioPage() {
                   <button
                     className="text-xs mt-3 underline"
                     onClick={() => { setActiveFaceUrl(avatarSelfieUrl); setShowFacePicker(false); }}
-                    style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
+                    style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer" }}
                   >
                     ← Reset to my primary selfie
                   </button>
@@ -415,12 +428,19 @@ export default function StudioPage() {
           </div>
 
           <div className="surface p-5">
+            <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
+              Selected ({selectedItems.length}/2)
+            </div>
             {selectedItems.length === 0 ? (
               <p className="text-xs mb-3" style={{ color: "var(--text-dim)" }}>None yet.</p>
             ) : (
               <div className="space-y-2 mb-3">
                 {selectedItems.map((it) => (
-                  <div key={it.id} className="flex items-center gap-2 text-xs">
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-2 text-xs px-2 py-1.5"
+                    style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)", borderRadius: 8 }}
+                  >
                     <div className="relative flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 6, overflow: "hidden" }}>
                       <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="32px" />
                     </div>
@@ -467,69 +487,68 @@ export default function StudioPage() {
             )}
           </div>
 
-          {resultUrl && !videoUrl && (
-            <>
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Compare</div>
-                <button className="btn-secondary w-full" onClick={() => setShowCompare((v) => !v)} disabled={!avatarSelfieUrl}>
-                  <ArrowLeftRight size={14} /> {showCompare ? "Hide before/after" : "Before / After"}
-                </button>
-              </div>
+          <>
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Compare</div>
+              <button className="btn-secondary w-full" onClick={() => setShowCompare((v) => !v)} disabled={!resultUrl || !avatarSelfieUrl}>
+                <ArrowLeftRight size={14} /> {showCompare ? "Hide before/after" : "Before / After"}
+              </button>
+            </div>
 
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Place in event</div>
-                <input className="input mb-2" placeholder="e.g. beach wedding"
-                       value={eventInput} onChange={(e) => setEventInput(e.target.value)} />
-                <button className="btn-secondary w-full" onClick={() => generateEventScene(eventInput)}
-                        disabled={!eventInput.trim() || eventLoading}>
-                  {eventLoading ? <Loader2 size={14} className="spin" /> : <MapPin size={14} />}
-                  {eventLoading ? "Placing..." : "Place in scene"}
-                </button>
-                {(eventLoading || eventUrl) && (
-                  <div className="mt-2">
-                    <ProgressBar
-                      status={eventLoading ? "running" : "complete"}
-                      estimatedSeconds={25}
-                      label="Placing in scene"
-                    />
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {EVENT_PRESETS.map((p) => (
-                    <button key={p} className="chip" onClick={() => { setEventInput(p); generateEventScene(p); }}
-                            disabled={eventLoading} style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
-                      {p.split(",")[0]}
-                    </button>
-                  ))}
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Place in event</div>
+              <input className="input mb-2" placeholder="e.g. beach wedding"
+                     value={eventInput} onChange={(e) => setEventInput(e.target.value)}
+                     disabled={!resultUrl} />
+              <button className="btn-secondary w-full" onClick={() => generateEventScene(eventInput)}
+                      disabled={!resultUrl || !eventInput.trim() || eventLoading}>
+                {eventLoading ? <Loader2 size={14} className="spin" /> : <MapPin size={14} />}
+                {eventLoading ? "Placing..." : "Place in scene"}
+              </button>
+              {(eventLoading || eventUrl) && (
+                <div className="mt-2">
+                  <ProgressBar
+                    status={eventLoading ? "running" : "complete"}
+                    estimatedSeconds={25}
+                    label="Placing in scene"
+                  />
                 </div>
+              )}
+              <div className="flex flex-wrap gap-1 mt-3">
+                {EVENT_PRESETS.map((p) => (
+                  <button key={p} className="chip" onClick={() => { setEventInput(p); generateEventScene(p); }}
+                          disabled={!resultUrl || eventLoading} style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
+                    {p.split(",")[0]}
+                  </button>
+                ))}
               </div>
+            </div>
 
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate</div>
-                <button className="btn-primary w-full" onClick={animate} disabled={animating}>
-                  {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (5s video)</>}
-                </button>
-                {(animating || videoUrl) && (
-                  <div className="mt-2">
-                    <ProgressBar
-                      status={animating ? "running" : "complete"}
-                      estimatedSeconds={75}
-                      label="Rendering video"
-                    />
-                  </div>
-                )}
-              </div>
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate</div>
+              <button className="btn-primary w-full" onClick={animate} disabled={!resultUrl || animating || !!videoUrl}>
+                {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : videoUrl ? <><Film size={14} /> Video ready</> : <><Film size={14} /> Animate (5s video)</>}
+              </button>
+              {(animating || videoUrl) && (
+                <div className="mt-2">
+                  <ProgressBar
+                    status={animating ? "running" : "complete"}
+                    estimatedSeconds={75}
+                    label="Rendering video"
+                  />
+                </div>
+              )}
+            </div>
 
-              <div className="surface p-5 space-y-2">
-                <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)}>
-                  <Save size={14} /> Save outfit
-                </button>
-                <button className="btn-secondary w-full" onClick={() => setShowShare(true)} disabled={!resultId}>
-                  <Share2 size={14} /> Share with friend
-                </button>
-              </div>
-            </>
-          )}
+            <div className="surface p-5 space-y-2">
+              <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)} disabled={!resultUrl}>
+                <Save size={14} /> Save outfit
+              </button>
+              <button className="btn-secondary w-full" onClick={() => setShowShare(true)} disabled={!resultId}>
+                <Share2 size={14} /> Share with friend
+              </button>
+            </div>
+          </>
         </div>
       </div>
       </div>
