@@ -59,47 +59,50 @@ def valid_video_model(model: str | None) -> str:
 # Cinematic editorial style prompts. Specific descriptors >>> generic ones.
 
 PROMPT_TRYON_SINGLE = (
-    "Cinematic editorial fashion photograph of @selfie wearing the @garment, full body, "
-    "{setting}. The person's face, hair, skin tone, and body proportions from @selfie are "
-    "preserved exactly with no alterations. The garment from @garment is rendered with "
-    "accurate color, fabric texture, fit, drape, and silhouette. "
-    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
-    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
-    "8K detail, hyperrealistic, high dynamic range."
+    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the @garment, "
+    "in a natural confident standing pose, visible from head to feet. "
+    "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
+    "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
+    "Render the @garment with accurate color, fabric texture, fit, drape and silhouette. "
+    "{setting}. "
+    "Photorealistic, true-to-life skin texture, the whole frame in sharp even focus with the background "
+    "clearly visible and in focus (deep depth of field), professional fashion photography, natural realistic color."
 )
 
 PROMPT_TRYON_MULTI = (
-    "Cinematic editorial fashion photograph of @selfie wearing the complete outfit shown in @products, "
-    "full body, {setting}. Render every garment, accessory, watch and footwear from @products "
-    "exactly as pictured - preserve color, texture, fit and proportions. "
-    "The person's face, hair, skin tone, and body from @selfie are preserved exactly. "
-    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
-    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
-    "8K detail, hyperrealistic, high dynamic range."
+    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the complete outfit "
+    "shown in @products, in a natural confident standing pose, visible from head to feet. "
+    "Render every garment, accessory, watch and footwear from @products exactly as pictured: preserve color, "
+    "texture, fit and proportions. "
+    "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
+    "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
+    "{setting}. "
+    "Photorealistic, true-to-life skin texture, the whole frame in sharp even focus with the background "
+    "clearly visible and in focus (deep depth of field), professional fashion photography, natural realistic color."
 )
 
 PROMPT_EVENT_SCENE = (
-    "Cinematic editorial photograph of @subject at {event_context}. Full body visible, "
-    "the outfit on @subject is the focus. Shot on 50mm lens with shallow depth of field, "
-    "natural cinematic lighting that matches the scene's mood, candid confident pose, "
-    "magazine fashion editorial, photorealistic, hyperdetailed, 8K, high dynamic range. "
-    "Preserve face and outfit exactly from @subject."
+    "Full-body editorial photograph of the exact same person (@subject) at {event_context}, visible from head "
+    "to feet, natural confident pose, the outfit on @subject is the focus. "
+    "Preserve the face and outfit from @subject exactly: identical facial features and identity, no changes. "
+    "Natural lighting that matches the scene, the background clearly visible and in focus (deep depth of field), "
+    "photorealistic, professional fashion editorial, natural realistic color."
 )
 
 DEFAULT_SETTING = (
-    "softly lit luxury studio setting with neutral warm grey background, golden hour ambient "
-    "light from camera left, subtle rim light, minimal shadows"
+    "in a bright, airy photography studio with a clean warm-neutral backdrop, soft even diffused daylight, "
+    "the background tidy and in sharp focus"
 )
 
 
 # ───────────────────────────── HELPERS ───────────────────────────── #
 
 def _to_aspect_ratio(model: str) -> str:
-    """Default ratio for portrait fashion photos."""
-    if model == "gen4_image" or model == "gen4_image_turbo":
-        return "720:1280"
-    if model.startswith("gen4.5"):
-        return "720:1280"
+    """Portrait ratio for fashion photos. Model families accept different ratio sets."""
+    # gemini_2.5_flash only accepts a fixed list (e.g. 832:1248, 896:1152, 1024:1024).
+    if model == "gemini_2.5_flash":
+        return "832:1248"
+    # gen4_image / gen4_image_turbo / gen4.5 portrait
     return "720:1280"
 
 
@@ -193,6 +196,10 @@ def runway_generate_tryon(
         raise RuntimeError(f"Runway generation failed: {e.task_details}")
     except TaskTimeoutError:
         raise RuntimeError("Generation timed out (5 minutes)")
+    except Exception as e:
+        # Validation / model / network errors - surface a clean reason.
+        logger.error(f"Runway try-on error ({model}): {type(e).__name__}: {e}")
+        raise RuntimeError(f"Runway generation failed ({model}): {e}")
 
 
 def runway_generate_multi_tryon(

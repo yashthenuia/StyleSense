@@ -168,7 +168,13 @@ def build_stylist_instructions(user_name: str = "the user") -> str:
     )
 
 
-def build_dynamic_persona(user_name: str, items: list, max_items: int = 40) -> str:
+def build_dynamic_persona(
+    user_name: str,
+    items: list,
+    max_items: int = 40,
+    color_profile_text: str = "",
+    style_notes: list | None = None,
+) -> str:
     """
     PATCH-time personality string for the shared admin stylist (Aria).
 
@@ -198,6 +204,9 @@ def build_dynamic_persona(user_name: str, items: list, max_items: int = 40) -> s
     else:
         wardrobe_block = "(empty - the user has not added any clothes yet)"
 
+    color_block = color_profile_text.strip() or "(not analyzed yet)"
+    notes_block = "\n".join(f"- {s}" for s in (style_notes or [])) or "(none)"
+
     return f"""You are Aria, {name}'s personal stylist for the StyleSense app. You can SEE their entire wardrobe (listed below) and you make specific outfit recommendations from it.
 
 # HARD RULES
@@ -207,6 +216,13 @@ def build_dynamic_persona(user_name: str, items: list, max_items: int = 40) -> s
 3. Keep voice replies SHORT and conversational - 2 to 3 spoken sentences plus a list when suggesting an outfit. The user is hearing you, not reading.
 4. If the wardrobe is empty, tell the user they need to add items first - do NOT make up clothes.
 5. Be warm, confident, and specific. Honest opinions on color, fit, occasion welcome.
+6. Use {name}'s COLOR PROFILE: favor their flattering colors, steer away from their avoid colors, and explain briefly WHY a piece suits their coloring.
+
+# {name.upper()}'S COLOR PROFILE
+{color_block}
+
+# STYLING NOTES (reference, apply naturally)
+{notes_block}
 
 # {name.upper()}'S WARDROBE ({len(items)} items)
 {wardrobe_block}

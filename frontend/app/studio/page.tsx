@@ -40,7 +40,7 @@ export default function StudioPage() {
   const {
     avatarSelfieUrl,
     selectedItemIds,
-    toggleSelected,
+    setSelected,
     clearSelected,
     stylizedAvatarUrl,
     stylizedAvatarStatus,
@@ -58,6 +58,7 @@ export default function StudioPage() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [quality, setQuality] = useState<"standard" | "pro">("pro");
   const [settingInput, setSettingInput] = useState("");
+  const [enhancePrompt, setEnhancePrompt] = useState(true);
   // Face picker: which selfie URL to use as the avatar reference for try-on
   const [activeFaceUrl, setActiveFaceUrl] = useState<string | null>(null);
   const [allSelfies, setAllSelfies] = useState<string[]>([]);
@@ -146,6 +147,32 @@ export default function StudioPage() {
   const selectedItems = items.filter((i) => selectedItemIds.includes(i.id));
   const effectiveSelfieUrl = activeFaceUrl || avatarSelfieUrl;
 
+  // Category-aware selection: one item per outfit "slot" (top, bottom, outerwear,
+  // shoes). A dress is mutually exclusive with tops + bottoms. Accessories stack.
+  function selectItem(item: WardrobeItem) {
+    const id = item.id;
+    const cat = (item.category || "tops").toLowerCase();
+    if (selectedItemIds.includes(id)) {
+      setSelected(selectedItemIds.filter((x) => x !== id));
+      return;
+    }
+    const catOf = (iid: string) => (items.find((w) => w.id === iid)?.category || "").toLowerCase();
+    let next = [...selectedItemIds];
+    if (cat === "accessories") {
+      next.push(id);
+    } else if (cat === "dresses") {
+      next = next.filter((x) => !["dresses", "tops", "bottoms"].includes(catOf(x)));
+      next.push(id);
+    } else if (cat === "tops" || cat === "bottoms") {
+      next = next.filter((x) => catOf(x) !== cat && catOf(x) !== "dresses");
+      next.push(id);
+    } else {
+      next = next.filter((x) => catOf(x) !== cat);
+      next.push(id);
+    }
+    setSelected(next);
+  }
+
   function reset() {
     setShowCompare(false);
     setEventInput("");
@@ -162,6 +189,7 @@ export default function StudioPage() {
       setting: settingInput.trim() || undefined,
       quality,
       model: tryonModel,
+      enhancePrompt,
     });
   }
 
@@ -184,6 +212,7 @@ export default function StudioPage() {
       parentTryOnDbId: resultId,
       model: videoModel,
       motionPrompt: motionPrompt.trim() || undefined,
+      enhancePrompt,
     });
   }
 
@@ -240,7 +269,7 @@ export default function StudioPage() {
               return (
                 <button
                   key={it.id}
-                  onClick={() => toggleSelected(it.id)}
+                  onClick={() => selectItem(it)}
                   className="surface overflow-hidden relative"
                   style={{ padding: 0, cursor: "pointer", borderColor: sel ? "var(--gold)" : "var(--border)" }}
                   title={it.name}
@@ -271,9 +300,9 @@ export default function StudioPage() {
             >
               {videoUrl ? (
                 <video src={videoUrl} controls autoPlay loop className="w-full" style={{ aspectRatio: "9/16", objectFit: "contain", background: "var(--surface2)" }} />
-              ) : showCompare && (stylizedAvatarUrl || avatarSelfieUrl) ? (
+              ) : showCompare && effectiveSelfieUrl ? (
                 <ReactCompareSlider
-                  itemOne={<ReactCompareSliderImage src={stylizedAvatarUrl || avatarSelfieUrl!} alt="Before" />}
+                  itemOne={<ReactCompareSliderImage src={effectiveSelfieUrl} alt="Before" />}
                   itemTwo={<ReactCompareSliderImage src={resultUrl} alt="After" />}
                   style={{ aspectRatio: "9/16" }}
                 />
@@ -493,9 +522,13 @@ export default function StudioPage() {
             <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
               Pose / setting (optional)
             </div>
-            <input className="input mb-3" placeholder="e.g. golden hour, garden walk"
+            <input className="input mb-2" placeholder="e.g. golden hour, garden walk"
                    value={settingInput} onChange={(e) => setSettingInput(e.target.value)}
                    style={{ fontSize: "0.85rem" }} />
+            <label className="flex items-center gap-2 mb-3 cursor-pointer" style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              <input type="checkbox" checked={enhancePrompt} onChange={(e) => setEnhancePrompt(e.target.checked)} />
+              <span>✦ AI-enhance my prompt (try-on + video)</span>
+            </label>
 
             <button className="btn-primary w-full" onClick={generate}
                     disabled={!effectiveSelfieUrl || selectedItems.length === 0 || generating}>

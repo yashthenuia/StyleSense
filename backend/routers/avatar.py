@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, B
 from typing import Optional
 
 from models.schemas import CreateCharacterRequest, SyncKnowledgeRequest
-from services import supabase_service, character_service, avatar_pose_service
+from services import supabase_service, character_service, avatar_pose_service, color_service, style_kb
 from services.auth_service import current_user
 from services.image_service import validate_image_bytes
 
@@ -26,6 +26,18 @@ async def _bg_generate_stylized(user_id: str, selfie_url: str):
     cheap for users who already have the still but not the video.
     """
     row = supabase_service.get_user(user_id) or {}
+
+    # Stage 0: color profile (cheap vision) - recompute when the selfie changes.
+    if row.get("color_profile_source_selfie") != selfie_url:
+        try:
+            profile = color_service.analyze_color_profile(selfie_url)
+            if profile:
+                supabase_service.upsert_user(
+                    user_id, color_profile=profile, color_profile_source_selfie=selfie_url
+                )
+                logger.info(f"Color profile refreshed for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Color profile refresh failed for {user_id}: {e}")
 
     # Stage 1: still ----------------------------------------------------------
     still_already_good = (
@@ -367,9 +379,27 @@ async def sync_stylist_kb(user = Depends(current_user)):
     user_row = supabase_service.get_user(user["id"]) or {}
     items = supabase_service.get_wardrobe_items(user["id"])
 
+    # Color profile: use cached, else derive once from the primary selfie.
+    profile = user_row.get("color_profile")
+    if not profile:
+        selfie = user_row.get("selfie_url") or (user_row.get("selfie_urls") or [None])[0]
+        if selfie:
+            profile = color_service.analyze_color_profile(selfie)
+            if profile:
+                try:
+                    supabase_service.upsert_user(
+                        user["id"], color_profile=profile, color_profile_source_selfie=selfie
+                    )
+                except Exception as e:
+                    logger.info(f"Could not cache color profile: {e}")
+
+    kb_snippets = style_kb.retrieve(query="", color_profile=profile, occasion=None)
+
     persona = character_service.build_dynamic_persona(
         user_name=user_row.get("full_name") or "the user",
         items=items,
+        color_profile_text=color_service.format_color_profile(profile),
+        style_notes=kb_snippets,
     )
 
     # Load-bearing: PATCH personality and AWAIT. If this fails, fail the whole

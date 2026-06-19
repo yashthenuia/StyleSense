@@ -7,6 +7,7 @@ import asyncio
 from models.schemas import TryOnRequest, MultiItemTryOnRequest, EventSceneRequest, AnimateRequest
 from services import runway_service, supabase_service
 from services.auth_service import current_user
+from graphs import prompt_graph
 
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=4)
@@ -53,6 +54,10 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
     if "localhost" in req.avatar_selfie_url or "localhost" in req.item_image_url:
         raise HTTPException(400, "URLs must be public HTTPS, not localhost. Upload to Supabase first.")
 
+    setting = req.setting
+    if req.enhance_prompt and setting:
+        setting = await _run_blocking(prompt_graph.build_prompt, setting, "manifest")
+
     try:
         result = await _run_blocking(
             runway_service.runway_generate_tryon,
@@ -61,7 +66,7 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
             item_name=req.item_name,
             item_category=req.item_category,
             model=runway_service.valid_tryon_model(req.model),
-            setting=req.setting,
+            setting=setting,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
@@ -92,13 +97,17 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
     if len(req.items) > 6:
         raise HTTPException(400, "Max 6 items at once (composite layout limit).")
 
+    setting = req.setting
+    if req.enhance_prompt and setting:
+        setting = await _run_blocking(prompt_graph.build_prompt, setting, "manifest")
+
     try:
         result = await _run_blocking(
             runway_service.runway_generate_multi_tryon,
             avatar_url=req.avatar_selfie_url,
             items=req.items,
             model=runway_service.valid_tryon_model(req.model),
-            setting=req.setting,
+            setting=setting,
             storage_uploader=supabase_service.upload_to_storage,
             user_id=user["id"],
         )
@@ -147,13 +156,20 @@ async def event_scene(req: EventSceneRequest, user = Depends(current_user)):
 
 @router.post("/animate")
 async def animate(req: AnimateRequest, user = Depends(current_user)):
+    motion = req.motion_prompt
+    scene = req.scene
+    if req.enhance_prompt and (req.motion_prompt or req.scene):
+        combined = " ".join(x for x in [req.scene, req.motion_prompt] if x)
+        motion = await _run_blocking(prompt_graph.build_prompt, combined, "video")
+        scene = None  # folded into the enhanced motion prompt
+
     try:
         result = await _run_blocking(
             runway_service.runway_animate,
             image_url=req.image_url,
-            motion_prompt=req.motion_prompt,
+            motion_prompt=motion,
             model=runway_service.valid_video_model(req.model),
-            scene=req.scene,
+            scene=scene,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))

@@ -1,11 +1,21 @@
-"""Anthropic-powered stylist chat."""
+"""Anthropic-powered stylist chat (Aria LangGraph agent)."""
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter, HTTPException, Depends
 
 from models.schemas import StylistChatRequest, StylistChatResponse
-from services import supabase_service, anthropic_service
+from services import supabase_service, anthropic_service, color_service
 from services.auth_service import current_user
+from graphs import aria_graph
 
 router = APIRouter()
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+async def _run_blocking(fn, *args, **kwargs):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
 
 
 @router.post("/chat", response_model=StylistChatResponse)
@@ -16,15 +26,37 @@ async def chat(req: StylistChatRequest, user = Depends(current_user)):
     wardrobe = supabase_service.get_wardrobe_items(user["id"])
 
     try:
-        reply = anthropic_service.stylist_chat(
+        result = await _run_blocking(
+            aria_graph.run_aria,
+            user_id=user["id"],
             messages=[m.model_dump() for m in req.messages],
-            wardrobe_items=wardrobe,
+            wardrobe=wardrobe,
         )
     except Exception as e:
         raise HTTPException(500, f"Stylist failed: {e}")
 
-    suggested_ids = anthropic_service.extract_item_ids(reply)
-    return StylistChatResponse(reply=reply, suggested_item_ids=suggested_ids)
+    return StylistChatResponse(reply=result["reply"], suggested_item_ids=result["item_ids"])
+
+
+@router.get("/color-profile")
+async def get_color_profile(user = Depends(current_user)):
+    """Return the user's cached color profile (or null if not analyzed yet)."""
+    row = supabase_service.get_user(user["id"]) or {}
+    return {"color_profile": row.get("color_profile")}
+
+
+@router.post("/color-profile")
+async def refresh_color_profile(user = Depends(current_user)):
+    """Force a fresh color analysis from the user's primary selfie and cache it."""
+    row = supabase_service.get_user(user["id"]) or {}
+    selfie = row.get("selfie_url") or (row.get("selfie_urls") or [None])[0]
+    if not selfie:
+        raise HTTPException(400, "No selfie on file. Upload one in Avatar Setup first.")
+    profile = await _run_blocking(color_service.analyze_color_profile, selfie)
+    if not profile:
+        raise HTTPException(502, "Color analysis failed. Try again.")
+    supabase_service.upsert_user(user["id"], color_profile=profile, color_profile_source_selfie=selfie)
+    return {"color_profile": profile}
 
 
 @router.get("/suggestions")

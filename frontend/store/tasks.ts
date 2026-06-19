@@ -69,6 +69,7 @@ interface State {
     setting?: string;
     quality: "standard" | "pro";
     model?: string;   // explicit try-on model id; overrides quality mapping
+    enhancePrompt?: boolean;  // AI-enhance the setting via the prompt graph
   }) => string;
   startEventScene: (input: {
     parentTaskId: string;       // in-memory store task id (NOT DB id)
@@ -83,6 +84,7 @@ interface State {
     model?: string;              // video model id
     motionPrompt?: string;       // user-chosen motion description
     scene?: string;              // optional scene/background hint
+    enhancePrompt?: boolean;     // AI-enhance the motion/scene via the prompt graph
   }) => string;
   clearDone: () => void;
   remove: (id: string) => void;
@@ -121,11 +123,13 @@ export const useTasks = create<State>((set, get) => ({
           item_name: input.items[0].name,
           item_category: input.items[0].category,
           model, setting,
+          enhance_prompt: input.enhancePrompt,
         })
       : apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate-multi", {
           avatar_selfie_url: input.avatarSelfieUrl,
           items: input.items.map((i) => ({ image_url: i.image_url, name: i.name, category: i.category })),
           model, setting,
+          enhance_prompt: input.enhancePrompt,
         });
 
     promise
@@ -203,6 +207,7 @@ export const useTasks = create<State>((set, get) => ({
       model: input.model,
       motion_prompt: input.motionPrompt,
       scene: input.scene,
+      enhance_prompt: input.enhancePrompt,
     })
       .then((res) => {
         update<AnimateTask>(set, id, {

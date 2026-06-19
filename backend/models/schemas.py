@@ -18,6 +18,7 @@ class TryOnRequest(BaseModel):
     item_category: str = "tops"
     model: str = "gen4_image"  # Default to full quality for best results
     setting: Optional[str] = None  # Optional cinematic setting override
+    enhance_prompt: bool = True  # Run the prompt-builder graph on `setting`
 
 
 class MultiItemTryOnRequest(BaseModel):
@@ -28,6 +29,7 @@ class MultiItemTryOnRequest(BaseModel):
     )
     model: str = "gen4_image"
     setting: Optional[str] = None
+    enhance_prompt: bool = True  # Run the prompt-builder graph on `setting`
 
 
 class EventSceneRequest(BaseModel):
@@ -41,6 +43,7 @@ class AnimateRequest(BaseModel):
     motion_prompt: str = "Person slowly turning, confident fashion model pose, smooth movement"
     scene: Optional[str] = None  # Optional scene/background folded into the motion prompt
     model: Optional[str] = None  # Video model id; validated + defaulted server-side
+    enhance_prompt: bool = True  # Run the prompt-builder graph on motion/scene
     tryon_result_id: Optional[str] = None
 
 
