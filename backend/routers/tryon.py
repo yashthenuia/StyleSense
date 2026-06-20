@@ -16,6 +16,22 @@ async def _run_blocking(fn, *args, **kwargs):
     return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
 
 
+async def _rehost(user_id: str, runway_url: str) -> str:
+    """
+    Re-host a Runway output URL into Supabase Storage so it never expires.
+    Runway's CloudFront URLs are short-lived signed links (the embedded _jwt
+    expires in days), which silently breaks saved try-ons/outfit previews.
+    Falls back to the raw URL if the download fails so a generation is never lost.
+    """
+    try:
+        return await _run_blocking(
+            supabase_service.upload_url_to_storage,
+            bucket="tryons", user_id=user_id, source_url=runway_url,
+        )
+    except Exception:
+        return runway_url
+
+
 @router.post("/generate")
 async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
     if "localhost" in req.avatar_selfie_url or "localhost" in req.item_image_url:
@@ -34,17 +50,19 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
+    image_url = await _rehost(user["id"], result["image_url"])
+
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
         item_id=req.wardrobe_item_id,
-        result_url=result["image_url"],
+        result_url=image_url,
         model_used=result["model_used"],
         prompt_used=result["prompt_used"],
         runway_task_id=result["task_id"],
     )
 
     return {
-        "result_image_url": result["image_url"],
+        "result_image_url": image_url,
         "result_id": saved["id"],
         "model_used": result["model_used"],
     }
@@ -70,17 +88,19 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
+    image_url = await _rehost(user["id"], result["image_url"])
+
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
         item_id=None,
-        result_url=result["image_url"],
+        result_url=image_url,
         model_used=result["model_used"],
         prompt_used=result["prompt_used"],
         runway_task_id=result["task_id"],
     )
 
     return {
-        "result_image_url": result["image_url"],
+        "result_image_url": image_url,
         "result_id": saved["id"],
         "model_used": result["model_used"],
     }
@@ -97,12 +117,14 @@ async def event_scene(req: EventSceneRequest, user = Depends(current_user)):
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
+    event_image_url = await _rehost(user["id"], result["image_url"])
+
     if req.tryon_result_id:
         supabase_service.update_tryon_event_scene(
-            req.tryon_result_id, result["image_url"], req.event_context
+            req.tryon_result_id, event_image_url, req.event_context
         )
 
-    return {"event_image_url": result["image_url"], "task_id": result["task_id"]}
+    return {"event_image_url": event_image_url, "task_id": result["task_id"]}
 
 
 @router.post("/animate")
