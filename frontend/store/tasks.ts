@@ -70,6 +70,7 @@ interface State {
     quality: "standard" | "pro";
     model?: string;   // explicit try-on model id; overrides quality mapping
     enhancePrompt?: boolean;  // AI-enhance the setting via the prompt graph
+    referenceSelfieUrls?: string[];  // extra selfie refs (Gemini identity)
   }) => string;
   startEventScene: (input: {
     parentTaskId: string;       // in-memory store task id (NOT DB id)
@@ -86,6 +87,7 @@ interface State {
     scene?: string;              // optional scene/background hint
     enhancePrompt?: boolean;     // AI-enhance the motion/scene via the prompt graph
   }) => string;
+  cancelTryOn: () => void;
   clearDone: () => void;
   remove: (id: string) => void;
 }
@@ -124,16 +126,20 @@ export const useTasks = create<State>((set, get) => ({
           item_category: input.items[0].category,
           model, setting,
           enhance_prompt: input.enhancePrompt,
+          reference_selfie_urls: input.referenceSelfieUrls,
         })
       : apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate-multi", {
           avatar_selfie_url: input.avatarSelfieUrl,
           items: input.items.map((i) => ({ image_url: i.image_url, name: i.name, category: i.category })),
           model, setting,
           enhance_prompt: input.enhancePrompt,
+          reference_selfie_urls: input.referenceSelfieUrls,
         });
 
     promise
       .then((res) => {
+        // Dropped if the user cancelled (task removed from the store).
+        if (!get().tasks.some((t) => t.id === id)) return;
         update<TryOnTask>(set, id, {
           status: "done",
           finishedAt: Date.now(),
@@ -143,6 +149,7 @@ export const useTasks = create<State>((set, get) => ({
         toast.success(`Try-on ready: ${task.label.slice(0, 40)}`);
       })
       .catch((e) => {
+        if (!get().tasks.some((t) => t.id === id)) return;
         const msg = e instanceof Error ? e.message : String(e);
         update<TryOnTask>(set, id, { status: "error", finishedAt: Date.now(), error: msg });
         toast.error(`Try-on failed: ${msg.slice(0, 80)}`);
@@ -231,6 +238,12 @@ export const useTasks = create<State>((set, get) => ({
       });
 
     return id;
+  },
+
+  cancelTryOn() {
+    // Drop the running try-on so the UI returns to idle. The in-flight fetch
+    // still resolves server-side, but its handler no-ops (task is gone).
+    set((s) => ({ tasks: s.tasks.filter((t) => !(t.kind === "tryon" && t.status === "running")) }));
   },
 
   clearDone() {

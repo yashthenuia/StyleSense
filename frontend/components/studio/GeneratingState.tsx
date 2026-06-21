@@ -10,15 +10,31 @@ const STEPS = [
   "Finishing details...",
 ];
 
-export function GeneratingState({ avatarUrl, itemUrls }: { avatarUrl: string | null; itemUrls: string[] }) {
-  const [stepIdx, setStepIdx] = useState(0);
-  const [secs, setSecs] = useState(0);
+const TOTAL = 32; // nominal seconds for the progress estimate
+
+// `startedAt` (task start timestamp) makes the progress continuous across page
+// navigation: on remount we recompute elapsed from it instead of restarting at 0.
+export function GeneratingState({
+  avatarUrl,
+  itemUrls,
+  startedAt,
+}: {
+  avatarUrl: string | null;
+  itemUrls: string[];
+  startedAt?: number;
+}) {
+  const elapsed = () => (startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0);
+  const [secs, setSecs] = useState(elapsed);
 
   useEffect(() => {
-    const tick = setInterval(() => setSecs((s) => s + 1), 1000);
-    const stepTick = setInterval(() => setStepIdx((i) => Math.min(i + 1, STEPS.length - 1)), 6000);
-    return () => { clearInterval(tick); clearInterval(stepTick); };
-  }, []);
+    const tick = setInterval(() => {
+      setSecs((s) => (startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : s + 1));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [startedAt]);
+
+  const stepIdx = Math.min(Math.floor(secs / 6), STEPS.length - 1);
+  const barPct = Math.min(92, Math.round((secs / TOTAL) * 92));
 
   return (
     <div className="surface p-8 flex flex-col items-center text-center" style={{ minHeight: 480 }}>
@@ -60,18 +76,21 @@ export function GeneratingState({ avatarUrl, itemUrls }: { avatarUrl: string | n
         </motion.div>
       </AnimatePresence>
 
-      {/* Progress bar */}
+      {/* Progress bar — width derived from elapsed so it survives remounts */}
       <div className="w-full max-w-md mb-3">
         <div style={{ height: 4, background: "var(--surface3)", borderRadius: 999, overflow: "hidden" }}>
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: "85%" }}
-            transition={{ duration: 28, ease: [0.6, 0.05, 0.4, 0.9] }}
-            style={{ height: "100%", background: "var(--gold)", boxShadow: "0 0 12px var(--gold-glow)" }}
+          <div
+            style={{
+              height: "100%",
+              width: `${barPct}%`,
+              background: "var(--gold)",
+              boxShadow: "0 0 12px var(--gold-glow)",
+              transition: "width 1s linear",
+            }}
           />
         </div>
         <div className="text-xs mt-2" style={{ color: "var(--text-dim)" }}>
-          ~{Math.max(0, 30 - secs)}s remaining · {secs}s elapsed
+          ~{Math.max(0, TOTAL - secs)}s remaining · {secs}s elapsed
         </div>
       </div>
 

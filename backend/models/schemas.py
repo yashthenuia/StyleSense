@@ -19,6 +19,7 @@ class TryOnRequest(BaseModel):
     model: str = "gen4_image"  # Default to full quality for best results
     setting: Optional[str] = None  # Optional cinematic setting override
     enhance_prompt: bool = True  # Run the prompt-builder graph on `setting`
+    reference_selfie_urls: Optional[List[str]] = None  # extra selfie refs (Gemini identity)
 
 
 class MultiItemTryOnRequest(BaseModel):
@@ -30,6 +31,7 @@ class MultiItemTryOnRequest(BaseModel):
     model: str = "gen4_image"
     setting: Optional[str] = None
     enhance_prompt: bool = True  # Run the prompt-builder graph on `setting`
+    reference_selfie_urls: Optional[List[str]] = None  # extra selfie refs (Gemini identity)
 
 
 class EventSceneRequest(BaseModel):
@@ -120,6 +122,7 @@ class SaveOutfit(BaseModel):
     occasion: Optional[str] = None
     preview_image_url: Optional[str] = None
     notes: Optional[str] = None
+    tryon_result_id: Optional[str] = None  # if set, marks that try-on as saved
 
 
 # ─────────────────────────── AVATAR ─────────────────────────── #

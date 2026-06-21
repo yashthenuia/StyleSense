@@ -7,6 +7,10 @@ import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast, Toaster } from "@/components/ui/Toast";
 
+// Google OAuth is hidden until it's actually enabled in Supabase. Set
+// NEXT_PUBLIC_GOOGLE_ENABLED=true (and configure the provider) to show it.
+const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
+
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -47,12 +51,7 @@ function LoginInner() {
     });
     if (error) {
       setOauthLoading(false);
-      // Common error: provider not enabled in Supabase dashboard
-      toast.error(
-        error.message.includes("provider")
-          ? "Google sign-in isn't enabled. Enable it in Supabase → Authentication → Providers → Google."
-          : error.message
-      );
+      toast.error(error.message);
     }
   }
 
@@ -71,20 +70,24 @@ function LoginInner() {
           </p>
         </div>
 
-        <button
-          className="btn-secondary w-full mb-4 flex items-center justify-center gap-2"
-          onClick={googleSignIn}
-          disabled={oauthLoading || loading}
-        >
-          {oauthLoading ? <Loader2 size={16} className="spin" /> : <GoogleIcon />}
-          Continue with Google
-        </button>
+        {GOOGLE_ENABLED && (
+          <>
+            <button
+              className="btn-secondary w-full mb-4 flex items-center justify-center gap-2"
+              onClick={googleSignIn}
+              disabled={oauthLoading || loading}
+            >
+              {oauthLoading ? <Loader2 size={16} className="spin" /> : <GoogleIcon />}
+              Continue with Google
+            </button>
 
-        <div className="flex items-center gap-3 my-5 text-xs" style={{ color: "var(--text-dim)" }}>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-          OR
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>
+            <div className="flex items-center gap-3 my-5 text-xs" style={{ color: "var(--text-dim)" }}>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              OR
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            </div>
+          </>
+        )}
 
         <div className="space-y-3 mb-5">
           <div>

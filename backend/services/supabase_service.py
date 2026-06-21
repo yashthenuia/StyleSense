@@ -184,11 +184,20 @@ def update_tryon_video(tryon_id: str, video_url: str, task_id: str) -> dict:
     return res.data[0] if res.data else {}
 
 
+def mark_tryon_saved(tryon_id: str) -> dict:
+    """Flip a try-on to saved=true so it shows in history (called when the user saves)."""
+    res = supabase.table("try_on_results").update({"saved": True}).eq("id", tryon_id).execute()
+    return res.data[0] if res.data else {}
+
+
 def get_recent_tryons(user_id: str, limit: int = 12) -> list:
+    # Only saved try-ons appear in history/dashboard; raw generations stay hidden
+    # until the user explicitly saves them.
     res = (
         supabase.table("try_on_results")
         .select("*")
         .eq("user_id", user_id)
+        .eq("saved", True)
         .order("created_at", desc=True)
         .limit(limit)
         .execute()

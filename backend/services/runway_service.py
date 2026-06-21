@@ -89,6 +89,50 @@ PROMPT_EVENT_SCENE = (
     "photorealistic, professional fashion editorial, natural realistic color."
 )
 
+# Gemini 2.5 Flash Image prompts. Gemini ignores @tags and reads natural-language
+# instructions that reference images BY ORDER. Per Google + community testing:
+# identity must lead and the garment description stays brief (detailed clothing
+# prompts measurably degrade face fidelity). References are reordered so the
+# garment/products is the FIRST image and the SELFIE is the LAST image (Gemini
+# adopts the last image's aspect ratio -> the portrait person).
+# Gemini's promptText is capped at 1000 chars, so these stay tight; _gemini_prompt()
+# trims the {setting} to fit. IMAGE 1 = garment; the REMAINING images are reference
+# photos of one person (multiple selfies sharpen identity). Identity-led; brief
+# clothing wording (detailed clothing wording degrades Gemini face fidelity).
+PROMPT_TRYON_SINGLE_GEMINI = (
+    "Virtual try-on: one photorealistic full-body e-commerce photo. "
+    "IMAGE 1 = the {item_name} (use only its clothing). "
+    "The other images are reference photos of ONE real person - their actual face and body. "
+    "Recreate THAT exact person wearing the garment, face IDENTICAL to the reference photos: "
+    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
+    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
+    "Full body head to feet, confident pose, face large and in sharp focus. "
+    "{setting}. Background in focus, realistic lighting, natural skin."
+)
+
+PROMPT_TRYON_MULTI_GEMINI = (
+    "Virtual try-on: one photorealistic full-body e-commerce photo. "
+    "IMAGE 1 = the outfit (use only its garments, accessories and footwear, as pictured). "
+    "The other images are reference photos of ONE real person - their actual face and body. "
+    "Recreate THAT exact person wearing the outfit, face IDENTICAL to the reference photos: "
+    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
+    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
+    "Full body head to feet, confident pose, face large and in sharp focus. "
+    "{setting}. Background in focus, realistic lighting, natural skin."
+)
+
+
+def _is_gemini(model: str) -> bool:
+    return model.startswith("gemini")
+
+
+def _gemini_prompt(template: str, *, setting: str, **kwargs) -> str:
+    """Format a Gemini prompt, trimming {setting} so the total stays under Gemini's
+    1000-char promptText limit (the trailing instructions are preserved)."""
+    base = template.format(setting="", **kwargs)
+    room = max(0, 1000 - len(base) - 2)
+    return template.format(setting=setting[:room], **kwargs)
+
 DEFAULT_SETTING = (
     "in a bright, airy photography studio with a clean warm-neutral backdrop, soft even diffused daylight, "
     "the background tidy and in sharp focus"
@@ -163,6 +207,18 @@ def composite_product_collage(item_image_urls: list[str], width: int = 1024, hei
 
 # ───────────────────────────── TRY-ON ───────────────────────────── #
 
+def _selfie_refs(avatar_url: str, extra_selfie_urls=None) -> list:
+    """Deduped selfie reference list (primary first). Runway caps referenceImages at
+    3 total, so with the garment taking one slot we use at most 2 selfies. Multiple
+    selfies sharpen Gemini identity."""
+    urls, seen = [], set()
+    for u in [avatar_url, *(extra_selfie_urls or [])]:
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    return [{"uri": u, "tag": "selfie"} for u in urls[:2]]
+
+
 def runway_generate_tryon(
     avatar_url: str,
     item_url: str,
@@ -170,19 +226,26 @@ def runway_generate_tryon(
     item_category: str = "tops",
     model: str = "gen4_image",
     setting: str | None = None,
+    extra_selfie_urls=None,
 ) -> dict:
     """Generate single-item try-on. Defaults to full-quality gen4_image."""
-    prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
+    if _is_gemini(model):
+        # Gemini: garment IMAGE 1 + one or more selfie references after it, identity-led.
+        prompt = _gemini_prompt(PROMPT_TRYON_SINGLE_GEMINI, item_name=item_name, setting=setting or DEFAULT_SETTING)
+        reference_images = [{"uri": item_url, "tag": "garment"}] + _selfie_refs(avatar_url, extra_selfie_urls)
+    else:
+        prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
+        reference_images = [
+            {"uri": avatar_url, "tag": "selfie"},
+            {"uri": item_url, "tag": "garment"},
+        ]
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
-            reference_images=[
-                {"uri": avatar_url, "tag": "selfie"},
-                {"uri": item_url, "tag": "garment"},
-            ],
+            reference_images=reference_images,
         ).wait_for_task_output(timeout=300)
 
         return {
@@ -209,6 +272,7 @@ def runway_generate_multi_tryon(
     setting: str | None = None,
     storage_uploader=None,
     user_id: str | None = None,
+    extra_selfie_urls=None,
 ) -> dict:
     """
     Multi-item try-on. Builds ONE composite product image from all items
@@ -234,6 +298,7 @@ def runway_generate_multi_tryon(
             item_category=items[0].get("category", "tops"),
             model=model,
             setting=setting,
+            extra_selfie_urls=extra_selfie_urls,
         )
 
     # Build composite
@@ -247,17 +312,22 @@ def runway_generate_multi_tryon(
         content_type="image/jpeg",
     )
 
-    prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
+    if _is_gemini(model):
+        prompt = _gemini_prompt(PROMPT_TRYON_MULTI_GEMINI, setting=setting or DEFAULT_SETTING)
+        reference_images = [{"uri": composite_url, "tag": "products"}] + _selfie_refs(avatar_url, extra_selfie_urls)
+    else:
+        prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
+        reference_images = [
+            {"uri": avatar_url, "tag": "selfie"},
+            {"uri": composite_url, "tag": "products"},
+        ]
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
-            reference_images=[
-                {"uri": avatar_url, "tag": "selfie"},
-                {"uri": composite_url, "tag": "products"},
-            ],
+            reference_images=reference_images,
         ).wait_for_task_output(timeout=300)
 
         return {
