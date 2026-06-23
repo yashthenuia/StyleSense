@@ -1,0 +1,98 @@
+"""
+Simple RAG-style retriever over the curated style knowledge base.
+
+No vector DB - the knowledge file is small and structured, so we select the
+relevant sections by (a) the user's color profile (season + undertone) and
+(b) keyword overlap with the query/occasion. Returns short text snippets the
+Aria agent injects into its prompt.
+"""
+import json
+import logging
+import os
+from functools import lru_cache
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+_KB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "style_knowledge.json")
+
+
+@lru_cache(maxsize=1)
+def _kb() -> dict:
+    try:
+        with open(_KB_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Could not load style knowledge base: {e}")
+        return {}
+
+
+def _matches(section: dict, text: str) -> bool:
+    kws = section.get("keywords") or []
+    return any(kw.lower() in text for kw in kws)
+
+
+def detect_occasion(text: str) -> Optional[str]:
+    """Deterministic keyword match of an occasion name from free text. No LLM."""
+    t = (text or "").lower()
+    for name, block in _kb().get("occasions", {}).items():
+        if name in t or _matches(block, t):
+            return name
+    return None
+
+
+def retrieve(
+    query: str = "",
+    color_profile: Optional[dict] = None,
+    occasion: Optional[str] = None,
+    max_snippets: int = 6,
+) -> list[str]:
+    """
+    Pull the relevant knowledge snippets:
+      - the user's season + undertone blocks (from color_profile)
+      - the occasion block matching `occasion` or keywords in the query
+      - any pairing rules whose keywords appear in the query
+    """
+    kb = _kb()
+    if not kb:
+        return []
+
+    text = f"{query} {occasion or ''}".lower()
+    snippets: list[str] = []
+
+    # Color profile blocks
+    if color_profile:
+        season = (color_profile.get("season") or "").strip().lower()
+        undertone = (color_profile.get("undertone") or "").strip().lower()
+        season_block = kb.get("seasons", {}).get(season)
+        if season_block:
+            snippets.append(season_block["text"])
+        undertone_block = kb.get("undertones", {}).get(undertone)
+        if undertone_block:
+            snippets.append(undertone_block["text"])
+
+    # Occasion block: explicit match first, else keyword match against the query
+    occasions = kb.get("occasions", {})
+    occ_key = (occasion or "").strip().lower()
+    if occ_key and occ_key in occasions:
+        snippets.append(occasions[occ_key]["text"])
+    else:
+        for name, block in occasions.items():
+            if (occ_key and occ_key in name) or _matches(block, text):
+                snippets.append(block["text"])
+                break
+
+    # Pairing rules by keyword
+    for rule in kb.get("pairing_rules", []):
+        if _matches(rule, text):
+            snippets.append(rule["text"])
+
+    # De-dup, preserve order, cap
+    seen, out = set(), []
+    for s in snippets:
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+        if len(out) >= max_snippets:
+            break
+    return out

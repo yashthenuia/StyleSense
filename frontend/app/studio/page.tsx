@@ -2,11 +2,11 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import {
   Sparkles, MapPin, Film, Loader2, Save, ArrowLeftRight, Shirt, AlertCircle, Share2,
-  User as UserIcon, RefreshCw, Upload,
+  User as UserIcon, RefreshCw, Upload, X,
 } from "lucide-react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -18,7 +18,14 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
+import { TRYON_MODELS, VIDEO_MODELS } from "@/lib/models";
 import type { WardrobeItem } from "@/types";
+
+const MOTION_PRESETS = [
+  { label: "Slow turn to camera", prompt: "The subject slowly turns toward the camera with a confident editorial pose, gentle hair movement." },
+  { label: "Runway walk", prompt: "The subject walks toward the camera like a fashion runway model, full-body, smooth confident stride." },
+  { label: "Windswept editorial", prompt: "Ambient breeze moves the hair and fabric, the subject shifts weight subtly, cinematic slow motion." },
+];
 
 const EVENT_PRESETS = [
   "beach wedding, golden hour",
@@ -34,22 +41,30 @@ export default function StudioPage() {
   const {
     avatarSelfieUrl,
     selectedItemIds,
-    toggleSelected,
+    setSelected,
     clearSelected,
     stylizedAvatarUrl,
     stylizedAvatarStatus,
     setStylized,
+    tryonModel,
+    videoModel,
+    setTryonModel,
+    setVideoModel,
   } = useAppStore();
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [eventInput, setEventInput] = useState("");
+  const [motionPrompt, setMotionPrompt] = useState(MOTION_PRESETS[0].prompt);
   const [showShare, setShowShare] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [quality, setQuality] = useState<"standard" | "pro">("pro");
   const [settingInput, setSettingInput] = useState("");
+  const [enhancePrompt, setEnhancePrompt] = useState(true);
   // Face picker: which selfie URL to use as the avatar reference for try-on
   const [activeFaceUrl, setActiveFaceUrl] = useState<string | null>(null);
   const [allSelfies, setAllSelfies] = useState<string[]>([]);
+  // Optional 2nd reference selfie (Gemini uses up to 2 selfies for sharper identity)
+  const [extraRefSelfies, setExtraRefSelfies] = useState<string[]>([]);
   const [showFacePicker, setShowFacePicker] = useState(false);
   const [customFaceUrl, setCustomFaceUrl] = useState("");
   const [uploadingFace, setUploadingFace] = useState(false);
@@ -77,18 +92,18 @@ export default function StudioPage() {
   const startTryOn = useTasks((s) => s.startTryOn);
   const startEventScene = useTasks((s) => s.startEventScene);
   const startAnimate = useTasks((s) => s.startAnimate);
+  const cancelTryOn = useTasks((s) => s.cancelTryOn);
   const activeTryOn = useTasks(selectActiveTryOn);
 
   const generating = activeTryOn?.status === "running";
   const resultUrl = activeTryOn?.resultUrl;
   const resultId = activeTryOn?.resultId;
-  const nobgUrl = activeTryOn?.nobgUrl;
   const eventUrl = activeTryOn?.eventUrl;
   const videoUrl = activeTryOn?.videoUrl;
 
   // Other ongoing operations - simple booleans derived from store
   const eventLoading = useTasks((s) =>
-    s.tasks.some((t) => t.kind === "event" && t.status === "running" && t.parentTryOnId === resultId)
+    s.tasks.some((t) => t.kind === "event" && t.status === "running" && t.parentTryOnDbId === resultId)
   );
   const animating = useTasks((s) =>
     s.tasks.some((t) => t.kind === "animate" && t.status === "running")
@@ -135,6 +150,32 @@ export default function StudioPage() {
   const selectedItems = items.filter((i) => selectedItemIds.includes(i.id));
   const effectiveSelfieUrl = activeFaceUrl || avatarSelfieUrl;
 
+  // Category-aware selection: one item per outfit "slot" (top, bottom, outerwear,
+  // shoes). A dress is mutually exclusive with tops + bottoms. Accessories stack.
+  function selectItem(item: WardrobeItem) {
+    const id = item.id;
+    const cat = (item.category || "tops").toLowerCase();
+    if (selectedItemIds.includes(id)) {
+      setSelected(selectedItemIds.filter((x) => x !== id));
+      return;
+    }
+    const catOf = (iid: string) => (items.find((w) => w.id === iid)?.category || "").toLowerCase();
+    let next = [...selectedItemIds];
+    if (cat === "accessories") {
+      next.push(id);
+    } else if (cat === "dresses") {
+      next = next.filter((x) => !["dresses", "tops", "bottoms"].includes(catOf(x)));
+      next.push(id);
+    } else if (cat === "tops" || cat === "bottoms") {
+      next = next.filter((x) => catOf(x) !== cat && catOf(x) !== "dresses");
+      next.push(id);
+    } else {
+      next = next.filter((x) => catOf(x) !== cat);
+      next.push(id);
+    }
+    setSelected(next);
+  }
+
   function reset() {
     setShowCompare(false);
     setEventInput("");
@@ -150,6 +191,11 @@ export default function StudioPage() {
       avatarSelfieUrl: effectiveSelfieUrl,
       setting: settingInput.trim() || undefined,
       quality,
+      model: tryonModel,
+      enhancePrompt,
+      referenceSelfieUrls: extraRefSelfies.length
+        ? extraRefSelfies.filter((u) => u !== effectiveSelfieUrl)
+        : undefined,
     });
   }
 
@@ -170,6 +216,9 @@ export default function StudioPage() {
       sourceUrl,
       parentTaskId: activeTryOn.id,
       parentTryOnDbId: resultId,
+      model: videoModel,
+      motionPrompt: motionPrompt.trim() || undefined,
+      enhancePrompt,
     });
   }
 
@@ -178,9 +227,10 @@ export default function StudioPage() {
       await apiPost("/api/outfits/save", {
         name,
         item_ids: selectedItemIds,
-        preview_image_url: resultUrl,
+        preview_image_url: eventUrl || resultUrl,
+        tryon_result_id: resultId,
       });
-      toast.success("Outfit saved.");
+      toast.success("Saved — it's now in your Outfits & history.");
     } catch (e) {
       toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
@@ -222,7 +272,7 @@ export default function StudioPage() {
               return (
                 <button
                   key={it.id}
-                  onClick={() => toggleSelected(it.id)}
+                  onClick={() => selectItem(it)}
                   className="surface overflow-hidden relative flex-shrink-0 w-20 h-20 lg:w-auto lg:h-auto lg:flex-shrink"
                   style={{ padding: 0, cursor: "pointer", background: "#fff", borderColor: sel ? "var(--ink)" : "var(--border)" }}
                   title={it.name}
@@ -250,7 +300,7 @@ export default function StudioPage() {
 
         <div className="lg:col-span-6">
           {generating ? (
-            <GeneratingState avatarUrl={avatarSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} />
+            <GeneratingState avatarUrl={effectiveSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} startedAt={activeTryOn?.startedAt} />
           ) : resultUrl ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -263,25 +313,20 @@ export default function StudioPage() {
               }}
             >
               {videoUrl ? (
-                <video src={videoUrl} controls autoPlay loop className="w-full" style={{ aspectRatio: "3/4" }} />
-              ) : showCompare && (stylizedAvatarUrl || avatarSelfieUrl) ? (
-                <ReactCompareSlider
-                  itemOne={<ReactCompareSliderImage src={stylizedAvatarUrl || avatarSelfieUrl!} alt="Before" />}
-                  itemTwo={<ReactCompareSliderImage src={resultUrl} alt="After" />}
-                  style={{ aspectRatio: "3/4" }}
-                />
-              ) : eventUrl ? (
-                // Event scene: full Runway-generated background
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={eventUrl} alt="Event scene" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
-              ) : nobgUrl ? (
-                // Default post-generate: avatar cutout on grid — grid visible through transparent areas
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={nobgUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "contain" }} />
+                <video src={videoUrl} controls autoPlay loop
+                  style={{ display: "block", margin: "0 auto", maxHeight: "72vh", maxWidth: "100%" }} />
+              ) : showCompare && effectiveSelfieUrl ? (
+                <div style={{ maxWidth: "calc(72vh * 9 / 16)", margin: "0 auto" }}>
+                  <ReactCompareSlider
+                    itemOne={<ReactCompareSliderImage src={effectiveSelfieUrl} alt="Before" />}
+                    itemTwo={<ReactCompareSliderImage src={resultUrl} alt="After" />}
+                    style={{ aspectRatio: "9/16", width: "100%" }}
+                  />
+                </div>
               ) : (
-                // Fallback if rembg failed
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={resultUrl} alt="Try-on result" className="w-full" style={{ aspectRatio: "3/4", objectFit: "cover" }} />
+                <img src={eventUrl || resultUrl} alt="Try-on result"
+                  style={{ display: "block", margin: "0 auto", maxHeight: "72vh", maxWidth: "100%" }} />
               )}
             </motion.div>
           ) : (
@@ -300,6 +345,39 @@ export default function StudioPage() {
                     <div className="text-sm">Select items and generate to see your look</div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {resultUrl && !generating && (activeTryOn?.itemImageUrls?.length ?? 0) > 0 && (
+            <div className="surface p-3 mt-3">
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+                Items in this look — click one to try it alone
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {activeTryOn!.itemImageUrls.map((u, i) => {
+                  const match = items.find((w) => w.image_url === u);
+                  return (
+                    <button
+                      key={i}
+                      className="shrink-0 text-center"
+                      style={{ width: 56, background: "none", border: "none", padding: 0, cursor: match ? "pointer" : "default" }}
+                      title={match ? `Try "${match.name}" alone` : (activeTryOn!.itemNames?.[i] || "")}
+                      onClick={() => {
+                        if (!match) return;
+                        setSelected([match.id]);
+                        reset();
+                        toast.info(`Selected "${match.name}" — click Manifest to try it alone.`);
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={u} alt="" className="object-cover" style={{ width: 56, height: 56, borderRadius: 8, border: "1px solid var(--border)" }} />
+                      <div className="truncate text-[10px] mt-1" style={{ color: "var(--text-dim)" }}>
+                        {activeTryOn!.itemNames?.[i] || ""}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -365,6 +443,39 @@ export default function StudioPage() {
                     </button>
                   ))}
                 </div>
+
+                {allSelfies.length > 1 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
+                      2nd reference selfie · Gemini
+                    </div>
+                    <div className="text-[10px] mb-2" style={{ color: "var(--text-dim)" }}>
+                      Add another angle to sharpen the face (Gemini only).
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {allSelfies.filter((u) => u !== effectiveSelfieUrl).map((url) => {
+                        const on = extraRefSelfies.includes(url);
+                        return (
+                          <button
+                            key={url}
+                            onClick={() => setExtraRefSelfies(on ? [] : [url])}
+                            className="surface overflow-hidden relative"
+                            style={{ width: 50, height: 50, padding: 0, cursor: "pointer", borderColor: on ? "var(--gold)" : undefined }}
+                            title={on ? "Remove 2nd reference" : "Use as 2nd reference"}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="w-full h-full object-cover" />
+                            {on && (
+                              <div className="absolute top-0 right-0 text-[9px] px-1 font-bold"
+                                   style={{ background: "var(--gold)", color: "var(--on-gold)" }}>2</div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
                   Upload a photo
                 </div>
@@ -450,35 +561,36 @@ export default function StudioPage() {
               </div>
             )}
 
-            <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Quality</div>
-            <div className="flex gap-1 mb-3">
-              <button className={`chip flex-1 justify-center ${quality === "standard" ? "chip-active" : ""}`}
-                      onClick={() => setQuality("standard")} style={{ fontSize: "0.7rem" }}
-                      title="Faster">Standard</button>
-              <button className={`chip flex-1 justify-center ${quality === "pro" ? "chip-active" : ""}`}
-                      onClick={() => setQuality("pro")} style={{ fontSize: "0.7rem" }}
-                      title="Best quality">Pro ✦</button>
+            <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Try-on model</div>
+            <select className="input mb-1" value={tryonModel} onChange={(e) => setTryonModel(e.target.value)}
+                    style={{ fontSize: "0.85rem" }}>
+              {TRYON_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
+              ))}
+            </select>
+            <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
+              {TRYON_MODELS.find((m) => m.id === tryonModel)?.blurb}
             </div>
 
             <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
               Pose / setting (optional)
             </div>
-            <input className="input mb-3" placeholder="e.g. golden hour, garden walk"
+            <input className="input mb-2" placeholder="e.g. golden hour, garden walk"
                    value={settingInput} onChange={(e) => setSettingInput(e.target.value)}
                    style={{ fontSize: "0.85rem" }} />
+            <label className="flex items-center gap-2 mb-3 cursor-pointer" style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              <input type="checkbox" checked={enhancePrompt} onChange={(e) => setEnhancePrompt(e.target.checked)} />
+              <span>✦ AI-enhance my prompt (try-on + video)</span>
+            </label>
 
             <button className="btn-primary w-full" onClick={generate}
                     disabled={!effectiveSelfieUrl || selectedItems.length === 0 || generating}>
               {generating ? <><Loader2 size={16} className="spin" /> Manifesting</> : <><Sparkles size={16} /> Manifest This Look</>}
             </button>
-            {(generating || resultUrl) && (
-              <div className="mt-2">
-                <ProgressBar
-                  status={generating ? "running" : "complete"}
-                  estimatedSeconds={40}
-                  label="Generating try-on"
-                />
-              </div>
+            {generating && (
+              <button className="btn-secondary w-full mt-2" onClick={() => { cancelTryOn(); toast.info("Generation cancelled."); }} style={{ padding: "0.5rem 1rem" }}>
+                <X size={14} /> Cancel
+              </button>
             )}
             {selectedItems.length > 0 && !generating && (
               <button className="btn-secondary w-full mt-2" onClick={() => { clearSelected(); reset(); }} style={{ padding: "0.5rem 1rem" }}>
@@ -525,30 +637,54 @@ export default function StudioPage() {
             </div>
 
             <div className="surface p-5">
-              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate</div>
-              <button className="btn-primary w-full" onClick={animate} disabled={!resultUrl || animating || !!videoUrl}>
-                {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : videoUrl ? <><Film size={14} /> Video ready</> : <><Film size={14} /> Animate (5s video)</>}
-              </button>
-              {(animating || videoUrl) && (
-                <div className="mt-2">
-                  <ProgressBar
-                    status={animating ? "running" : "complete"}
-                    estimatedSeconds={75}
-                    label="Rendering video"
-                  />
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate your current scene</div>
+              {eventUrl && (
+                <div className="text-[11px] mb-2" style={{ color: "var(--gold)" }}>
+                  Using placed scene: {eventInput || "current scene"}
                 </div>
               )}
-            </div>
 
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Video model</div>
+              <select className="input mb-1" value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
+                      style={{ fontSize: "0.85rem" }}>
+                {VIDEO_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
+                ))}
+              </select>
+              <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
+                {VIDEO_MODELS.find((m) => m.id === videoModel)?.blurb}
+              </div>
+
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Motion</div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {MOTION_PRESETS.map((p) => (
+                  <button key={p.label} className={`chip ${motionPrompt === p.prompt ? "chip-active" : ""}`}
+                          onClick={() => setMotionPrompt(p.prompt)} disabled={animating}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <input className="input mb-3" placeholder="Describe the motion (optional)"
+                     value={motionPrompt} onChange={(e) => setMotionPrompt(e.target.value)}
+                     style={{ fontSize: "0.8rem" }} disabled={animating} />
+
+              <button className="btn-primary w-full" onClick={animate} disabled={animating}>
+                {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (6s video)</>}
+              </button>
+            </div>
+          </>
+
+          {resultUrl && (
             <div className="surface p-5 space-y-2">
-              <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)} disabled={!resultUrl}>
-                <Save size={14} /> Save outfit
+              <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)}>
+                <Save size={14} /> Save {videoUrl ? "look" : "outfit"}
               </button>
               <button className="btn-secondary w-full" onClick={() => setShowShare(true)} disabled={!resultId}>
                 <Share2 size={14} /> Share with friend
               </button>
             </div>
-          </>
+          )}
         </div>
       </div>
       </div>

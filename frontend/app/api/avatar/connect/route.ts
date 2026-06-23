@@ -49,7 +49,7 @@ export async function POST(_request: NextRequest) {
     let session;
     try {
       session = await client.realtimeSessions.retrieve(sessionId);
-    } catch (e) {
+    } catch {
       // Transient fetch glitch — try again after a short sleep
       await new Promise((r) => setTimeout(r, 1000));
       continue;

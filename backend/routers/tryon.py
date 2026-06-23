@@ -1,4 +1,5 @@
 """Try-on, event scene, and animation endpoints."""
+import os
 from fastapi import APIRouter, HTTPException, Depends
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
@@ -6,14 +7,31 @@ import asyncio
 from models.schemas import TryOnRequest, MultiItemTryOnRequest, EventSceneRequest, AnimateRequest
 from services import runway_service, supabase_service
 from services.auth_service import current_user
+from graphs import prompt_graph
 
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=4)
+
+# Optional identity-reinforcement pass after a try-on. Off by default (adds ~5cr +
+# ~30s per generation). Enable with FACE_RESTORE=1 in the backend env.
+FACE_RESTORE = os.getenv("FACE_RESTORE", "0") == "1"
 
 
 async def _run_blocking(fn, *args, **kwargs):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
+
+
+async def _maybe_restore_face(subject_url: str, face_url: str | None, model: str) -> str:
+    """gen4 identity-reinforcement pass when FACE_RESTORE is enabled.
+    Gemini try-ons skip this entirely (single-pass; identity comes from multiple
+    selfie references in the try-on itself). Falls back to the original on failure."""
+    if runway_service._is_gemini(model) or not FACE_RESTORE or not face_url:
+        return subject_url
+    restored = await _run_blocking(
+        runway_service.runway_restore_face, subject_url=subject_url, face_url=face_url
+    )
+    return restored or subject_url
 
 
 async def _rehost(user_id: str, runway_url: str) -> str:
@@ -32,11 +50,25 @@ async def _rehost(user_id: str, runway_url: str) -> str:
         return runway_url
 
 
+def _extra_selfies(user_id: str, primary: str, model: str) -> list:
+    """Gemini benefits from several selfie references; fetch the user's other
+    selfies (gen4 ignores this). Returns [] when not Gemini or none available."""
+    if not runway_service._is_gemini(model):
+        return []
+    row = supabase_service.get_user(user_id) or {}
+    return [s for s in (row.get("selfie_urls") or []) if s and s != primary][:2]
+
+
 @router.post("/generate")
 async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
     if "localhost" in req.avatar_selfie_url or "localhost" in req.item_image_url:
         raise HTTPException(400, "URLs must be public HTTPS, not localhost. Upload to Supabase first.")
 
+    setting = req.setting
+    if req.enhance_prompt and setting:
+        setting = await _run_blocking(prompt_graph.build_prompt, setting, "manifest")
+
+    model = runway_service.valid_tryon_model(req.model)
     try:
         result = await _run_blocking(
             runway_service.runway_generate_tryon,
@@ -44,13 +76,15 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
             item_url=req.item_image_url,
             item_name=req.item_name,
             item_category=req.item_category,
-            model=req.model,
-            setting=req.setting,
+            model=model,
+            setting=setting,
+            extra_selfie_urls=req.reference_selfie_urls or _extra_selfies(user["id"], req.avatar_selfie_url, model),
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
-    image_url = await _rehost(user["id"], result["image_url"])
+    restored = await _maybe_restore_face(result["image_url"], req.avatar_selfie_url, result["model_used"])
+    image_url = await _rehost(user["id"], restored)
 
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
@@ -75,20 +109,27 @@ async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(curren
     if len(req.items) > 6:
         raise HTTPException(400, "Max 6 items at once (composite layout limit).")
 
+    setting = req.setting
+    if req.enhance_prompt and setting:
+        setting = await _run_blocking(prompt_graph.build_prompt, setting, "manifest")
+
+    model = runway_service.valid_tryon_model(req.model)
     try:
         result = await _run_blocking(
             runway_service.runway_generate_multi_tryon,
             avatar_url=req.avatar_selfie_url,
             items=req.items,
-            model=req.model,
-            setting=req.setting,
+            model=model,
+            setting=setting,
             storage_uploader=supabase_service.upload_to_storage,
             user_id=user["id"],
+            extra_selfie_urls=req.reference_selfie_urls or _extra_selfies(user["id"], req.avatar_selfie_url, model),
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
 
-    image_url = await _rehost(user["id"], result["image_url"])
+    restored = await _maybe_restore_face(result["image_url"], req.avatar_selfie_url, result["model_used"])
+    image_url = await _rehost(user["id"], restored)
 
     saved = supabase_service.save_tryon_result(
         user_id=user["id"],
@@ -129,11 +170,20 @@ async def event_scene(req: EventSceneRequest, user = Depends(current_user)):
 
 @router.post("/animate")
 async def animate(req: AnimateRequest, user = Depends(current_user)):
+    motion = req.motion_prompt
+    scene = req.scene
+    if req.enhance_prompt and (req.motion_prompt or req.scene):
+        combined = " ".join(x for x in [req.scene, req.motion_prompt] if x)
+        motion = await _run_blocking(prompt_graph.build_prompt, combined, "video")
+        scene = None  # folded into the enhanced motion prompt
+
     try:
         result = await _run_blocking(
             runway_service.runway_animate,
             image_url=req.image_url,
-            motion_prompt=req.motion_prompt,
+            motion_prompt=motion,
+            model=runway_service.valid_video_model(req.model),
+            scene=scene,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))

@@ -24,6 +24,9 @@ frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[frontend_url, "http://localhost:3000", "http://127.0.0.1:3000"],
+    # Allow the production domain plus every Vercel preview deploy
+    # (each preview gets its own *.vercel.app subdomain).
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -21,6 +21,11 @@ interface AppState {
   stylizedVideoUrl: string | null;
   stylizedVideoStatus: "idle" | "generating" | "ready" | "failed" | "no_selfie" | null;
   setStylizedVideo: (url: string | null, status: AppState["stylizedVideoStatus"]) => void;
+  // User-selected Runway models for Studio (persisted). See frontend/lib/models.ts.
+  tryonModel: string;
+  videoModel: string;
+  setTryonModel: (id: string) => void;
+  setVideoModel: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -32,6 +37,10 @@ export const useAppStore = create<AppState>()(
       stylizedAvatarStatus: null,
       stylizedVideoUrl: null,
       stylizedVideoStatus: null,
+      tryonModel: "gen4_image",
+      videoModel: "veo3.1",
+      setTryonModel: (id) => set({ tryonModel: id }),
+      setVideoModel: (id) => set({ videoModel: id }),
       toggleSelected: (id) =>
         set((s) => ({
           selectedItemIds: s.selectedItemIds.includes(id)
@@ -52,6 +61,8 @@ export const useAppStore = create<AppState>()(
         stylizedAvatarStatus: s.stylizedAvatarStatus,
         stylizedVideoUrl: s.stylizedVideoUrl,
         stylizedVideoStatus: s.stylizedVideoStatus,
+        tryonModel: s.tryonModel,
+        videoModel: s.videoModel,
       }),
     }
   )

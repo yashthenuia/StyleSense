@@ -30,51 +30,123 @@ if not _API_KEY:
 client = RunwayML(api_key=_API_KEY)
 
 
+# ───────────────────────────── MODEL ALLOWLISTS ───────────────────────────── #
+# Mirrors frontend/lib/models.ts. Used to validate a user-selected model id and
+# fall back to the default rather than passing an unknown/mismatched id to Runway.
+
+# Limited to models the installed runwayml SDK (4.4.0) actually supports.
+# Newer API models (gemini_image3_pro, gpt_image_2, seedance2) require an SDK
+# upgrade (>=5.x) and Runway plan access, otherwise the task never starts and
+# wait_for_task_output polls until timeout.
+TRYON_MODELS = {"gen4_image", "gen4_image_turbo", "gemini_2.5_flash"}
+VIDEO_MODELS = {"veo3.1", "veo3.1_fast", "gen4_turbo"}
+
+DEFAULT_TRYON_MODEL = "gen4_image"
+DEFAULT_VIDEO_MODEL = "veo3.1"
+
+
+def valid_tryon_model(model: str | None) -> str:
+    """Return a valid try-on model id, defaulting if missing/unknown."""
+    return model if model in TRYON_MODELS else DEFAULT_TRYON_MODEL
+
+
+def valid_video_model(model: str | None) -> str:
+    """Return a valid video model id, defaulting if missing/unknown."""
+    return model if model in VIDEO_MODELS else DEFAULT_VIDEO_MODEL
+
+
 # ───────────────────────────── PROMPTS ───────────────────────────── #
 # Cinematic editorial style prompts. Specific descriptors >>> generic ones.
 
 PROMPT_TRYON_SINGLE = (
-    "Cinematic editorial fashion photograph of @selfie wearing the @garment, full body, "
-    "{setting}. The person's face, hair, skin tone, and body proportions from @selfie are "
-    "preserved exactly with no alterations. The garment from @garment is rendered with "
-    "accurate color, fabric texture, fit, drape, and silhouette. "
-    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
-    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
-    "8K detail, hyperrealistic, high dynamic range."
+    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the @garment, "
+    "in a natural confident standing pose, visible from head to feet. "
+    "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
+    "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
+    "Render the @garment with accurate color, fabric texture, fit, drape and silhouette. "
+    "{setting}. "
+    "Photorealistic, true-to-life skin texture, the whole frame in sharp even focus with the background "
+    "clearly visible and in focus (deep depth of field), professional fashion photography, natural realistic color."
 )
 
 PROMPT_TRYON_MULTI = (
-    "Cinematic editorial fashion photograph of @selfie wearing the complete outfit shown in @products, "
-    "full body, {setting}. Render every garment, accessory, watch and footwear from @products "
-    "exactly as pictured - preserve color, texture, fit and proportions. "
-    "The person's face, hair, skin tone, and body from @selfie are preserved exactly. "
-    "Shot on 50mm lens, shallow depth of field, professional fashion photography, "
-    "magazine quality, sharp focus on subject, photorealistic, natural skin texture, "
-    "8K detail, hyperrealistic, high dynamic range."
+    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the complete outfit "
+    "shown in @products, in a natural confident standing pose, visible from head to feet. "
+    "Render every garment, accessory, watch and footwear from @products exactly as pictured: preserve color, "
+    "texture, fit and proportions. "
+    "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
+    "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
+    "{setting}. "
+    "Photorealistic, true-to-life skin texture, the whole frame in sharp even focus with the background "
+    "clearly visible and in focus (deep depth of field), professional fashion photography, natural realistic color."
 )
 
 PROMPT_EVENT_SCENE = (
-    "Cinematic editorial photograph of @subject at {event_context}. Full body visible, "
-    "the outfit on @subject is the focus. Shot on 50mm lens with shallow depth of field, "
-    "natural cinematic lighting that matches the scene's mood, candid confident pose, "
-    "magazine fashion editorial, photorealistic, hyperdetailed, 8K, high dynamic range. "
-    "Preserve face and outfit exactly from @subject."
+    "Full-body editorial photograph of the exact same person (@subject) at {event_context}, visible from head "
+    "to feet, natural confident pose, the outfit on @subject is the focus. "
+    "Preserve the face and outfit from @subject exactly: identical facial features and identity, no changes. "
+    "Natural lighting that matches the scene, the background clearly visible and in focus (deep depth of field), "
+    "photorealistic, professional fashion editorial, natural realistic color."
 )
 
+# Gemini 2.5 Flash Image prompts. Gemini ignores @tags and reads natural-language
+# instructions that reference images BY ORDER. Per Google + community testing:
+# identity must lead and the garment description stays brief (detailed clothing
+# prompts measurably degrade face fidelity). References are reordered so the
+# garment/products is the FIRST image and the SELFIE is the LAST image (Gemini
+# adopts the last image's aspect ratio -> the portrait person).
+# Gemini's promptText is capped at 1000 chars, so these stay tight; _gemini_prompt()
+# trims the {setting} to fit. IMAGE 1 = garment; the REMAINING images are reference
+# photos of one person (multiple selfies sharpen identity). Identity-led; brief
+# clothing wording (detailed clothing wording degrades Gemini face fidelity).
+PROMPT_TRYON_SINGLE_GEMINI = (
+    "Virtual try-on: one photorealistic full-body e-commerce photo. "
+    "IMAGE 1 = the {item_name} (use only its clothing). "
+    "The other images are reference photos of ONE real person - their actual face and body. "
+    "Recreate THAT exact person wearing the garment, face IDENTICAL to the reference photos: "
+    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
+    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
+    "Full body head to feet, confident pose, face large and in sharp focus. "
+    "{setting}. Background in focus, realistic lighting, natural skin."
+)
+
+PROMPT_TRYON_MULTI_GEMINI = (
+    "Virtual try-on: one photorealistic full-body e-commerce photo. "
+    "IMAGE 1 = the outfit (use only its garments, accessories and footwear, as pictured). "
+    "The other images are reference photos of ONE real person - their actual face and body. "
+    "Recreate THAT exact person wearing the outfit, face IDENTICAL to the reference photos: "
+    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
+    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
+    "Full body head to feet, confident pose, face large and in sharp focus. "
+    "{setting}. Background in focus, realistic lighting, natural skin."
+)
+
+
+def _is_gemini(model: str) -> bool:
+    return model.startswith("gemini")
+
+
+def _gemini_prompt(template: str, *, setting: str, **kwargs) -> str:
+    """Format a Gemini prompt, trimming {setting} so the total stays under Gemini's
+    1000-char promptText limit (the trailing instructions are preserved)."""
+    base = template.format(setting="", **kwargs)
+    room = max(0, 1000 - len(base) - 2)
+    return template.format(setting=setting[:room], **kwargs)
+
 DEFAULT_SETTING = (
-    "softly lit luxury studio setting with neutral warm grey background, golden hour ambient "
-    "light from camera left, subtle rim light, minimal shadows"
+    "in a bright, airy photography studio with a clean warm-neutral backdrop, soft even diffused daylight, "
+    "the background tidy and in sharp focus"
 )
 
 
 # ───────────────────────────── HELPERS ───────────────────────────── #
 
 def _to_aspect_ratio(model: str) -> str:
-    """Default ratio for portrait fashion photos."""
-    if model == "gen4_image" or model == "gen4_image_turbo":
-        return "720:1280"
-    if model.startswith("gen4.5"):
-        return "720:1280"
+    """Portrait ratio for fashion photos. Model families accept different ratio sets."""
+    # gemini_2.5_flash only accepts a fixed list (e.g. 832:1248, 896:1152, 1024:1024).
+    if model == "gemini_2.5_flash":
+        return "832:1248"
+    # gen4_image / gen4_image_turbo / gen4.5 portrait
     return "720:1280"
 
 
@@ -135,6 +207,18 @@ def composite_product_collage(item_image_urls: list[str], width: int = 1024, hei
 
 # ───────────────────────────── TRY-ON ───────────────────────────── #
 
+def _selfie_refs(avatar_url: str, extra_selfie_urls=None) -> list:
+    """Deduped selfie reference list (primary first). Runway caps referenceImages at
+    3 total, so with the garment taking one slot we use at most 2 selfies. Multiple
+    selfies sharpen Gemini identity."""
+    urls, seen = [], set()
+    for u in [avatar_url, *(extra_selfie_urls or [])]:
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    return [{"uri": u, "tag": "selfie"} for u in urls[:2]]
+
+
 def runway_generate_tryon(
     avatar_url: str,
     item_url: str,
@@ -142,19 +226,26 @@ def runway_generate_tryon(
     item_category: str = "tops",
     model: str = "gen4_image",
     setting: str | None = None,
+    extra_selfie_urls=None,
 ) -> dict:
     """Generate single-item try-on. Defaults to full-quality gen4_image."""
-    prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
+    if _is_gemini(model):
+        # Gemini: garment IMAGE 1 + one or more selfie references after it, identity-led.
+        prompt = _gemini_prompt(PROMPT_TRYON_SINGLE_GEMINI, item_name=item_name, setting=setting or DEFAULT_SETTING)
+        reference_images = [{"uri": item_url, "tag": "garment"}] + _selfie_refs(avatar_url, extra_selfie_urls)
+    else:
+        prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
+        reference_images = [
+            {"uri": avatar_url, "tag": "selfie"},
+            {"uri": item_url, "tag": "garment"},
+        ]
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
-            reference_images=[
-                {"uri": avatar_url, "tag": "selfie"},
-                {"uri": item_url, "tag": "garment"},
-            ],
+            reference_images=reference_images,
         ).wait_for_task_output(timeout=300)
 
         return {
@@ -168,6 +259,10 @@ def runway_generate_tryon(
         raise RuntimeError(f"Runway generation failed: {e.task_details}")
     except TaskTimeoutError:
         raise RuntimeError("Generation timed out (5 minutes)")
+    except Exception as e:
+        # Validation / model / network errors - surface a clean reason.
+        logger.error(f"Runway try-on error ({model}): {type(e).__name__}: {e}")
+        raise RuntimeError(f"Runway generation failed ({model}): {e}")
 
 
 def runway_generate_multi_tryon(
@@ -177,6 +272,7 @@ def runway_generate_multi_tryon(
     setting: str | None = None,
     storage_uploader=None,
     user_id: str | None = None,
+    extra_selfie_urls=None,
 ) -> dict:
     """
     Multi-item try-on. Builds ONE composite product image from all items
@@ -202,6 +298,7 @@ def runway_generate_multi_tryon(
             item_category=items[0].get("category", "tops"),
             model=model,
             setting=setting,
+            extra_selfie_urls=extra_selfie_urls,
         )
 
     # Build composite
@@ -215,17 +312,22 @@ def runway_generate_multi_tryon(
         content_type="image/jpeg",
     )
 
-    prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
+    if _is_gemini(model):
+        prompt = _gemini_prompt(PROMPT_TRYON_MULTI_GEMINI, setting=setting or DEFAULT_SETTING)
+        reference_images = [{"uri": composite_url, "tag": "products"}] + _selfie_refs(avatar_url, extra_selfie_urls)
+    else:
+        prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
+        reference_images = [
+            {"uri": avatar_url, "tag": "selfie"},
+            {"uri": composite_url, "tag": "products"},
+        ]
 
     try:
         task = client.text_to_image.create(
             model=model,
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
-            reference_images=[
-                {"uri": avatar_url, "tag": "selfie"},
-                {"uri": composite_url, "tag": "products"},
-            ],
+            reference_images=reference_images,
         ).wait_for_task_output(timeout=300)
 
         return {
@@ -239,6 +341,46 @@ def runway_generate_multi_tryon(
         raise RuntimeError(f"Runway multi-tryon failed: {e.task_details}")
     except TaskTimeoutError:
         raise RuntimeError("Multi-tryon timed out (5 minutes)")
+
+
+# ───────────────────────────── FACE RESTORE ───────────────────────────── #
+
+PROMPT_FACE_RESTORE = (
+    "Editorial fashion photograph identical to @subject in every way - same outfit, "
+    "same pose, same body, same background, same lighting and framing - but restore the "
+    "exact facial identity, features, bone structure, eye shape, and skin tone of the "
+    "person in @face. The face must clearly read as the same individual as @face. "
+    "Photorealistic, natural skin texture, sharp focus, magazine quality, 8K. "
+    "Change nothing except locking the face to @face."
+)
+
+
+def runway_restore_face(subject_url: str, face_url: str, model: str = "gen4_image") -> str | None:
+    """
+    Identity-reinforcement second pass: re-render a generated try-on while locking
+    the user's exact face from their selfie. Returns the restored image URL, or None
+    on failure so the caller can keep the original try-on.
+    """
+    try:
+        task = client.text_to_image.create(
+            model=model,
+            prompt_text=PROMPT_FACE_RESTORE,
+            ratio=_to_aspect_ratio(model),
+            reference_images=[
+                {"uri": subject_url, "tag": "subject"},
+                {"uri": face_url, "tag": "face"},
+            ],
+        ).wait_for_task_output(timeout=300)
+        return task.output[0]
+    except TaskFailedError as e:
+        logger.warning(f"Face restore failed: {e.task_details}")
+        return None
+    except TaskTimeoutError:
+        logger.warning("Face restore timed out")
+        return None
+    except Exception as e:
+        logger.warning(f"Face restore error: {type(e).__name__}: {e}")
+        return None
 
 
 # ───────────────────────────── EVENT SCENE ───────────────────────────── #
@@ -273,14 +415,15 @@ def runway_animate(
     motion_prompt: str = "",
     model: str = "veo3.1",
     ratio: str = "720:1280",
-    duration: int = 5,
+    duration: int = 6,
+    scene: str | None = None,
 ) -> dict:
     """
     Animate a still image into a short video.
 
     Default model is veo3.1 - Runway's most realistic image-to-video offering
-    (re-routed from Google Veo). Better motion + scene fidelity than gen4.5.
-    Falls back to gen4.5 automatically if veo3.1 fails.
+    (re-routed from Google Veo). Falls back to gen4_turbo automatically if the
+    chosen model fails (both are supported by the installed SDK).
 
     Args:
         ratio: Runway aspect ratio string. Common values: "720:1280" (portrait,
@@ -295,13 +438,22 @@ def runway_animate(
         "The subject moves naturally and confidently — turning slightly toward camera, "
         "shifting weight, gentle hair movement, ambient breeze, alive eyes blinking. "
         "Cinematic depth of field, hyperrealistic motion, smooth fluid camera, "
-        "preserve the background scene and lighting exactly. Fashion editorial film grade, "
-        "magazine quality 8K motion."
+        "Fashion editorial film grade, magazine quality 8K motion."
+    )
+    # Fold an optional scene/background into the prompt and always pin the background
+    # so the placed event scene is retained through the motion.
+    if scene:
+        final_prompt = f"{final_prompt} Set in {scene}."
+    final_prompt = (
+        f"{final_prompt} Preserve the subject's face, outfit, body, the background scene "
+        "and lighting exactly — only add natural motion."
     )
 
     def _duration_for(m: str) -> int:
-        # veo3.1 only allows {4, 6, 8}; gen4.5 accepts 5
-        if m == "veo3.1" and duration == 5:
+        # veo models allow {4, 6, 8}; gen4_turbo/gen3a_turbo allow {5, 10}.
+        if m in ("gen4_turbo", "gen3a_turbo"):
+            return 5 if duration < 10 else 10
+        if m.startswith("veo") and duration not in (4, 6, 8):
             return 6
         return duration
 
@@ -323,15 +475,15 @@ def runway_animate(
             "prompt_used": final_prompt,
         }
     except TaskFailedError as e:
-        # Newer models can be flaky / capacity-constrained. Fall back to gen4.5.
-        if model != "gen4.5":
-            logger.warning(f"{model} failed ({e.task_details}); falling back to gen4.5")
+        # Newer models can be flaky / capacity-constrained. Fall back to gen4_turbo.
+        if model != "gen4_turbo":
+            logger.warning(f"{model} failed ({e.task_details}); falling back to gen4_turbo")
             try:
-                task = _try("gen4.5")
+                task = _try("gen4_turbo")
                 return {
                     "video_url": task.output[0],
                     "task_id": task.id,
-                    "model_used": "gen4.5 (fallback)",
+                    "model_used": "gen4_turbo (fallback)",
                     "prompt_used": final_prompt,
                 }
             except TaskFailedError as e2:
@@ -341,14 +493,14 @@ def runway_animate(
         raise RuntimeError("Animation timed out")
     except Exception as e:
         # Likely a model-not-available error for newer models; auto-fall-back
-        if model != "gen4.5":
-            logger.warning(f"{model} not available ({e}); falling back to gen4.5")
+        if model != "gen4_turbo":
+            logger.warning(f"{model} not available ({e}); falling back to gen4_turbo")
             try:
-                task = _try("gen4.5")
+                task = _try("gen4_turbo")
                 return {
                     "video_url": task.output[0],
                     "task_id": task.id,
-                    "model_used": "gen4.5 (fallback)",
+                    "model_used": "gen4_turbo (fallback)",
                     "prompt_used": final_prompt,
                 }
             except Exception as e2:

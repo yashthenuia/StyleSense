@@ -209,7 +209,7 @@ export default function OnboardingPage() {
         description="It'll be removed from your gallery. Try-ons that already used it stay intact."
         confirmLabel="Remove"
         destructive
-        onConfirm={() => pendingDelete && removeSelfie(pendingDelete)}
+        onConfirm={() => { if (pendingDelete) removeSelfie(pendingDelete); }}
       />
     </div>
   );
