@@ -59,21 +59,23 @@ def valid_video_model(model: str | None) -> str:
 # Cinematic editorial style prompts. Specific descriptors >>> generic ones.
 
 PROMPT_TRYON_SINGLE = (
-    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the @garment, "
-    "in a natural confident standing pose, visible from head to feet. "
+    "Full-length editorial fashion photograph of the exact same person from @selfie, wearing the @garment, "
+    "standing in a natural confident pose, the ENTIRE body and both legs fully visible head to feet, "
+    "framed full-length and NOT cropped at the waist or knees. "
     "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
     "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
-    "Render the @garment with accurate color, fabric texture, fit, drape and silhouette. "
+    "Render the @garment with accurate color, fabric texture, and a natural true-to-life fit, drape and silhouette. "
     "{setting}. "
     "Photorealistic, true-to-life skin texture, the whole frame in sharp even focus with the background "
     "clearly visible and in focus (deep depth of field), professional fashion photography, natural realistic color."
 )
 
 PROMPT_TRYON_MULTI = (
-    "Full-body editorial fashion photograph of the exact same person from @selfie, wearing the complete outfit "
-    "shown in @products, in a natural confident standing pose, visible from head to feet. "
+    "Full-length editorial fashion photograph of the exact same person from @selfie, wearing the complete outfit "
+    "shown in @products, standing in a natural confident pose, the ENTIRE body and both legs fully visible head to "
+    "feet, framed full-length and NOT cropped at the waist or knees. "
     "Render every garment, accessory, watch and footwear from @products exactly as pictured: preserve color, "
-    "texture, fit and proportions. "
+    "texture, and a natural true-to-life fit, drape, layering and proportions. "
     "The face is an identical match to @selfie: same facial features, bone structure, eyes, nose, lips, "
     "hairline, skin tone and complexion. Do not beautify, stylize, smooth, or alter the face or body proportions. "
     "{setting}. "
@@ -90,35 +92,38 @@ PROMPT_EVENT_SCENE = (
 )
 
 # Gemini 2.5 Flash Image prompts. Gemini ignores @tags and reads natural-language
-# instructions that reference images BY ORDER. Per Google + community testing:
-# identity must lead and the garment description stays brief (detailed clothing
-# prompts measurably degrade face fidelity). References are reordered so the
-# garment/products is the FIRST image and the SELFIE is the LAST image (Gemini
-# adopts the last image's aspect ratio -> the portrait person).
-# Gemini's promptText is capped at 1000 chars, so these stay tight; _gemini_prompt()
-# trims the {setting} to fit. IMAGE 1 = garment; the REMAINING images are reference
-# photos of one person (multiple selfies sharpen identity). Identity-led; brief
-# clothing wording (detailed clothing wording degrades Gemini face fidelity).
+# instructions that reference images BY ORDER, and it adopts the LAST image's person as
+# the output identity. So the garment/products is IMAGE 1 and the SELFIE is LAST - this
+# is critical: when the garment photo shows a model, putting the selfie last keeps the
+# user's face (selfie-first regressed this). The prompt also explicitly says to ignore
+# any model in IMAGE 1. Keep clothing wording brief - detailed clothing prompts degrade
+# face fidelity. (A tight face-crop / dual-reference was tested and rejected: it
+# collapses Gemini to a portrait and drops the garment.)
+# Runway caps promptText at 1000 chars for ALL models; _fit_prompt() trims the {setting} to fit.
 PROMPT_TRYON_SINGLE_GEMINI = (
-    "Virtual try-on: one photorealistic full-body e-commerce photo. "
-    "IMAGE 1 = the {item_name} (use only its clothing). "
-    "The other images are reference photos of ONE real person - their actual face and body. "
-    "Recreate THAT exact person wearing the garment, face IDENTICAL to the reference photos: "
-    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
-    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
-    "Full body head to feet, confident pose, face large and in sharp focus. "
-    "{setting}. Background in focus, realistic lighting, natural skin."
+    "Photorealistic full-body e-commerce try-on photo. "
+    "IMAGE 1 = the {item_name} - use ONLY its clothing; IGNORE any model or person shown wearing it. "
+    "The LAST image is the STRICT facial and identity reference: ONE real person. "
+    "Keep that person's real face EXACTLY as provided - same face shape, jaw, eyes, eyebrows, nose, lips, "
+    "skin tone, hairline and hair - with NO alteration, beautifying, smoothing, slimming, ageing or stylising. "
+    "The output must be unmistakably the SAME person, their face seamlessly and ultra-realistically integrated. "
+    "Never copy the face of any model from IMAGE 1; never invent a new person. "
+    "Dress them in the garment with a natural true-to-life fit, correct cut, length and drape. "
+    "Whole body head to feet, confident pose, the face large and in sharp focus. "
+    "{setting}. Clean premium background in sharp focus, realistic lighting, natural skin texture."
 )
 
 PROMPT_TRYON_MULTI_GEMINI = (
-    "Virtual try-on: one photorealistic full-body e-commerce photo. "
-    "IMAGE 1 = the outfit (use only its garments, accessories and footwear, as pictured). "
-    "The other images are reference photos of ONE real person - their actual face and body. "
-    "Recreate THAT exact person wearing the outfit, face IDENTICAL to the reference photos: "
-    "same face shape, jaw, eyes, brows, nose, lips, skin tone, hairline and hair. Unmistakably the same person. "
-    "Do not morph, beautify, slim, age, restyle, or invent a new person. "
-    "Full body head to feet, confident pose, face large and in sharp focus. "
-    "{setting}. Background in focus, realistic lighting, natural skin."
+    "Photorealistic full-body e-commerce try-on photo. "
+    "IMAGE 1 = the outfit - use ONLY its garments, accessories and footwear as pictured; IGNORE any model wearing them. "
+    "The LAST image is the STRICT facial and identity reference: ONE real person. "
+    "Keep that person's real face EXACTLY as provided - same face shape, jaw, eyes, eyebrows, nose, lips, "
+    "skin tone, hairline and hair - with NO alteration, beautifying, smoothing, slimming, ageing or stylising. "
+    "The output must be unmistakably the SAME person, their face seamlessly and ultra-realistically integrated. "
+    "Never copy the face of any model from IMAGE 1; never invent a new person. "
+    "Dress them in every garment with a natural true-to-life fit, correct cut, length, drape and layering. "
+    "Whole body head to feet, confident pose, the face large and in sharp focus. "
+    "{setting}. Clean premium background in sharp focus, realistic lighting, natural skin texture."
 )
 
 
@@ -126,9 +131,10 @@ def _is_gemini(model: str) -> bool:
     return model.startswith("gemini")
 
 
-def _gemini_prompt(template: str, *, setting: str, **kwargs) -> str:
-    """Format a Gemini prompt, trimming {setting} so the total stays under Gemini's
-    1000-char promptText limit (the trailing instructions are preserved)."""
+def _fit_prompt(template: str, *, setting: str, **kwargs) -> str:
+    """Format a try-on prompt, trimming {setting} so the total stays under Runway's
+    1000-char promptText limit (enforced for ALL models - gen4 too, not just Gemini).
+    The trailing identity/quality instructions are always preserved."""
     base = template.format(setting="", **kwargs)
     room = max(0, 1000 - len(base) - 2)
     return template.format(setting=setting[:room], **kwargs)
@@ -231,10 +237,13 @@ def runway_generate_tryon(
     """Generate single-item try-on. Defaults to full-quality gen4_image."""
     if _is_gemini(model):
         # Gemini: garment IMAGE 1 + one or more selfie references after it, identity-led.
-        prompt = _gemini_prompt(PROMPT_TRYON_SINGLE_GEMINI, item_name=item_name, setting=setting or DEFAULT_SETTING)
+        prompt = _fit_prompt(PROMPT_TRYON_SINGLE_GEMINI, item_name=item_name, setting=setting or DEFAULT_SETTING)
+        # Garment IMAGE 1, selfie(s) LAST: Gemini adopts the LAST image's person as the
+        # output identity, so the selfie must be last (otherwise a model in the garment
+        # photo bleeds into the face). The prompt also tells it to ignore any model in IMAGE 1.
         reference_images = [{"uri": item_url, "tag": "garment"}] + _selfie_refs(avatar_url, extra_selfie_urls)
     else:
-        prompt = PROMPT_TRYON_SINGLE.format(setting=setting or DEFAULT_SETTING)
+        prompt = _fit_prompt(PROMPT_TRYON_SINGLE, setting=setting or DEFAULT_SETTING)
         reference_images = [
             {"uri": avatar_url, "tag": "selfie"},
             {"uri": item_url, "tag": "garment"},
@@ -313,10 +322,11 @@ def runway_generate_multi_tryon(
     )
 
     if _is_gemini(model):
-        prompt = _gemini_prompt(PROMPT_TRYON_MULTI_GEMINI, setting=setting or DEFAULT_SETTING)
+        prompt = _fit_prompt(PROMPT_TRYON_MULTI_GEMINI, setting=setting or DEFAULT_SETTING)
+        # Products IMAGE 1, selfie(s) LAST (Gemini adopts the last image's identity).
         reference_images = [{"uri": composite_url, "tag": "products"}] + _selfie_refs(avatar_url, extra_selfie_urls)
     else:
-        prompt = PROMPT_TRYON_MULTI.format(setting=setting or DEFAULT_SETTING)
+        prompt = _fit_prompt(PROMPT_TRYON_MULTI, setting=setting or DEFAULT_SETTING)
         reference_images = [
             {"uri": avatar_url, "tag": "selfie"},
             {"uri": composite_url, "tag": "products"},
@@ -341,6 +351,11 @@ def runway_generate_multi_tryon(
         raise RuntimeError(f"Runway multi-tryon failed: {e.task_details}")
     except TaskTimeoutError:
         raise RuntimeError("Multi-tryon timed out (5 minutes)")
+    except Exception as e:
+        # Validation / model / network errors - surface a clean reason instead of a
+        # raw 500 (which surfaces as "failed to fetch" in the browser).
+        logger.error(f"Runway multi-tryon error ({model}): {type(e).__name__}: {e}")
+        raise RuntimeError(f"Runway generation failed ({model}): {e}")
 
 
 # ───────────────────────────── FACE RESTORE ───────────────────────────── #

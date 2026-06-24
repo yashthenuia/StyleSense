@@ -77,8 +77,8 @@ export default function StudioPage() {
       const res = await apiUpload<{ selfie_url: string; selfie_urls?: string[] }>(
         "/api/avatar/upload-selfie", fd
       );
-      setActiveFaceUrl(res.selfie_url);
       if (res.selfie_urls) setAllSelfies(res.selfie_urls);
+      switchFace(res.selfie_url);
       setShowFacePicker(false);
       toast.success("Face uploaded — using it for the next try-on.");
     } catch (e) {
@@ -179,6 +179,16 @@ export default function StudioPage() {
   function reset() {
     setShowCompare(false);
     setEventInput("");
+    useTasks.getState().clearDone();
+  }
+
+  // Switching the face must refresh the canvas: drop the lingering previous result
+  // so the idle view shows the NEWLY chosen face (otherwise the old model photo
+  // stays on screen and it looks like nothing changed).
+  function switchFace(url: string) {
+    setActiveFaceUrl(url);
+    setShowCompare(false);
+    setExtraRefSelfies([]);
     useTasks.getState().clearDone();
   }
 
@@ -462,7 +472,7 @@ export default function StudioPage() {
                   {allSelfies.map((url) => (
                     <button
                       key={url}
-                      onClick={() => { setActiveFaceUrl(url); setShowFacePicker(false); }}
+                      onClick={() => { switchFace(url); setShowFacePicker(false); }}
                       className="surface overflow-hidden"
                       style={{
                         width: 50, height: 50, padding: 0, cursor: "pointer",

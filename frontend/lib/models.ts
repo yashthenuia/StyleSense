@@ -15,9 +15,9 @@ export interface ModelOption {
 // Limited to models supported by the installed runwayml SDK (4.4.0). Newer
 // models (gemini_image3_pro, gpt_image_2, seedance2) need an SDK upgrade.
 export const TRYON_MODELS: ModelOption[] = [
-  { id: "gen4_image_turbo", label: "Gen-4 Turbo", blurb: "Fast & cheap draft quality", tier: "fast" },
-  { id: "gen4_image", label: "Gen-4", blurb: "Balanced default quality", tier: "standard" },
-  { id: "gemini_2.5_flash", label: "Gemini 2.5 Flash", blurb: "Quick image generation", tier: "fast" },
+  { id: "gen4_image", label: "Gen-4", blurb: "Best face match — looks most like you", tier: "premium" },
+  { id: "gemini_2.5_flash", label: "Gemini 2.5 Flash", blurb: "Fast, reliable full-body", tier: "fast" },
+  { id: "gen4_image_turbo", label: "Gen-4 Turbo", blurb: "Fast & cheap draft", tier: "fast" },
 ];
 
 // Image-to-video models. veo3.1 is the default.

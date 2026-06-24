@@ -4,6 +4,7 @@ from typing import Optional
 
 from models.schemas import SendMessageRequest
 from services.auth_service import current_user
+from services import supabase_service
 from services.supabase_service import supabase
 
 router = APIRouter()
@@ -85,16 +86,20 @@ async def get_thread(other_id: str, limit: int = 100, user = Depends(current_use
     if unread_ids:
         supabase.table("messages").update({"read_at": "now()"}).in_("id", unread_ids).execute()
 
-    # Hydrate shared attachments
+    # Hydrate shared attachments. outfits + try_on_results now live in Aurora, so
+    # fetch them via the supabase_service helpers (not the Supabase client, which
+    # still owns messages/profiles/friendships).
     outfit_ids = [m["shared_outfit_id"] for m in rows if m.get("shared_outfit_id")]
     tryon_ids = [m["shared_tryon_id"] for m in rows if m.get("shared_tryon_id")]
     outfits_map = {}
     tryons_map = {}
-    if outfit_ids:
-        for o in supabase.table("outfits").select("*").in_("id", outfit_ids).execute().data:
+    for oid in set(outfit_ids):
+        o = supabase_service.get_outfit(oid)
+        if o:
             outfits_map[o["id"]] = o
-    if tryon_ids:
-        for t in supabase.table("try_on_results").select("*").in_("id", tryon_ids).execute().data:
+    for tid in set(tryon_ids):
+        t = supabase_service.get_tryon(tid)
+        if t:
             tryons_map[t["id"]] = t
 
     enriched = []

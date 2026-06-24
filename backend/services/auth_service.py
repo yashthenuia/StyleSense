@@ -60,7 +60,19 @@ async def current_user(authorization: Optional[str] = Header(None)) -> dict:
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(401, "Authorization header must be 'Bearer <token>'")
     token = parts[1]
-    return _verify_token_via_api(token)
+    user = _verify_token_via_api(token)
+
+    # The Supabase handle_new_user() trigger creates the `profiles` row, but `users`
+    # now lives in Aurora and the trigger can't reach it - so provision it lazily here.
+    # Best-effort: a transient failure isn't fatal because writes upsert with
+    # ON CONFLICT and reads tolerate a missing row.
+    try:
+        from services import supabase_service
+        supabase_service.ensure_user(user["id"], user.get("email"))
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"ensure_user failed for {user.get('id')}: {e}")
+
+    return user
 
 
 async def optional_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
