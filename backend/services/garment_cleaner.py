@@ -16,33 +16,83 @@ Subsequent calls are fast (~2-3s on CPU).
 """
 import io
 import logging
-from typing import Literal
+from typing import Literal, Optional
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Lazy-load rembg session (heavy import + model download)
-_rembg_session = None
+# Lazy-loaded rembg sessions, cached per model (heavy import + one-time model download).
+_rembg_sessions: dict = {}
+
+# u2net_cloth_seg is trained on garments (upper/lower/full body) and is far better for
+# clothing, but it erases NON-clothing entirely (jewelry, bags, sunglasses, shoes come
+# out blank). So accessories/shoes use a general-purpose object segmenter instead.
+_CLOTHING_CATEGORIES = {"tops", "bottoms", "dresses", "outerwear"}
+_CLOTH_MODEL = "u2net_cloth_seg"
+_GENERAL_MODEL = "isnet-general-use"
 
 
-def _get_rembg_session(model_name: str = "u2net_cloth_seg"):
-    """
-    Default model: u2net_cloth_seg — trained specifically on clothing
-    (segments upper body / lower body / full body garments). Much better than
-    general-purpose models for fashion photos where hands/face/background
-    might otherwise win the "main subject" vote.
-
-    Other options if needed:
-      - 'isnet-general-use'   general object segmentation
-      - 'birefnet-general'    higher quality general (slower)
-      - 'u2net_human_seg'     keeps the entire person (including clothes + body)
-    """
-    global _rembg_session
-    if _rembg_session is None:
+def _get_rembg_session(model_name: str = _CLOTH_MODEL):
+    """Return a cached rembg session for the given model (one per model)."""
+    if model_name not in _rembg_sessions:
         from rembg import new_session
-        _rembg_session = new_session(model_name=model_name)
+        _rembg_sessions[model_name] = new_session(model_name=model_name)
         logger.info(f"rembg session initialized (model={model_name})")
-    return _rembg_session
+    return _rembg_sessions[model_name]
+
+
+def _model_for_category(category: Optional[str]) -> str:
+    return _CLOTH_MODEL if (category or "").lower() in _CLOTHING_CATEGORIES else _GENERAL_MODEL
+
+
+def _opaque_ratio(rgba: Image.Image) -> float:
+    """Fraction of pixels with meaningful alpha (>20)."""
+    alpha = rgba.getchannel("A")
+    hist = alpha.histogram()  # 256 buckets
+    visible = sum(hist[21:])
+    total = rgba.width * rgba.height
+    return visible / total if total else 0.0
+
+
+_MIN_OPAQUE = 0.003  # below this the cutout is essentially blank
+
+
+def _cutout_with_model(image_bytes: bytes, model: str):
+    """Run one rembg model; return (cropped RGBA, opaque_ratio) or (None, 0.0)."""
+    from rembg import remove
+    session = _get_rembg_session(model)
+    rgba = Image.open(io.BytesIO(remove(image_bytes, session=session))).convert("RGBA")
+    bbox = rgba.getbbox()
+    if bbox:
+        rgba = rgba.crop(bbox)
+    return rgba, _opaque_ratio(rgba)
+
+
+def make_cutout(image_bytes: bytes, category: Optional[str] = None) -> bytes | None:
+    """
+    Produce a TRANSPARENT PNG cutout for the closet display (NOT for try-on - try-on
+    keeps using the white-bg image). Picks the clothing model for garments and a
+    general object segmenter for accessories/shoes; if the primary model returns a
+    near-empty result, retries with the other model. Returns PNG bytes, or None on
+    failure / empty cutout (so the UI falls back to the white-bg image).
+    """
+    primary = _model_for_category(category)
+    fallback = _GENERAL_MODEL if primary == _CLOTH_MODEL else _CLOTH_MODEL
+    try:
+        rgba, ratio = _cutout_with_model(image_bytes, primary)
+        if ratio < _MIN_OPAQUE:
+            alt, alt_ratio = _cutout_with_model(image_bytes, fallback)
+            if alt_ratio > ratio:
+                rgba, ratio = alt, alt_ratio
+        if ratio < _MIN_OPAQUE:
+            logger.warning(f"make_cutout: near-empty cutout (category={category}); skipping")
+            return None
+        out = io.BytesIO()
+        rgba.save(out, format="PNG")
+        return out.getvalue()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"make_cutout failed: {type(e).__name__}: {e}")
+        return None
 
 
 CleanMethod = Literal["runway", "rembg", "original", "skipped"]

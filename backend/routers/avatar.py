@@ -14,50 +14,44 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _bg_generate_stylized(user_id: str, selfie_url: str):
+async def _bg_refresh_profile(user_id: str, source_url: str):
+    """Cheap color/body profile refresh from the best available photo (no avatar/video)."""
+    try:
+        profile = color_service.analyze_color_profile(source_url)
+        if profile:
+            supabase_service.upsert_user(
+                user_id, color_profile=profile, color_profile_source_selfie=source_url
+            )
+            logger.info(f"Profile refreshed for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Profile refresh failed for {user_id}: {e}")
+
+
+async def _bg_generate_stylized(user_id: str, selfie_url: str, still_only: bool = True):
     """
-    Background helper - swallows errors so a Runway hiccup doesn't crash anything.
-    Two-stage pipeline, each step idempotent against its source:
-      1. Generate the still stylized portrait (~5cr, ~30s) - skipped if a
-         ready still already exists for this exact selfie_url
-      2. Chain the ramp-walking video on the still (~60-100cr, ~60-90s) -
-         skipped if a ready video already exists for this exact stylized URL
-    The idempotence guards make the /regenerate-stylized backfill button
-    cheap for users who already have the still but not the video.
+    ON-DEMAND avatar pipeline (triggered by /regenerate-stylized, never on upload):
+      1. Realistic, face-preserving hero - manifests the user in their recent outfit (~5cr)
+      2. (only when still_only=False) ramp-walking video chained on the still (~60-100cr)
+    Also refreshes the cheap color/body profile from the best photo.
     """
     row = supabase_service.get_user(user_id) or {}
+    body_url = row.get("full_body_url")
+    profile_src = color_service.best_profile_source(row) or selfie_url
 
-    # Stage 0: color profile (cheap vision) - recompute when the selfie changes.
-    if row.get("color_profile_source_selfie") != selfie_url:
-        try:
-            profile = color_service.analyze_color_profile(selfie_url)
-            if profile:
-                supabase_service.upsert_user(
-                    user_id, color_profile=profile, color_profile_source_selfie=selfie_url
-                )
-                logger.info(f"Color profile refreshed for user {user_id}")
-        except Exception as e:
-            logger.warning(f"Color profile refresh failed for {user_id}: {e}")
+    # Stage 0: color profile (cheap vision) - recompute when the source changes.
+    if row.get("color_profile_source_selfie") != profile_src:
+        await _bg_refresh_profile(user_id, profile_src)
 
-    # Stage 1: still ----------------------------------------------------------
-    still_already_good = (
-        row.get("stylized_avatar_source_selfie") == selfie_url
-        and row.get("stylized_avatar_status") == "ready"
-        and row.get("stylized_avatar_url")
-    )
-    if still_already_good:
-        stylized_url = row["stylized_avatar_url"]
-        logger.info(f"Stylized still already cached for {user_id}; skipping to video step")
-    else:
-        try:
-            result = await avatar_pose_service.generate_stylized_avatar(user_id, selfie_url)
-            stylized_url = result.get("url")
-            logger.info(f"Stylized avatar ready for user {user_id}")
-        except Exception as e:
-            logger.warning(f"Stylized avatar gen failed for {user_id}: {e}")
-            return
+    # Stage 1: realistic hero (always regenerated on an explicit refresh request).
+    try:
+        result = await avatar_pose_service.generate_realistic_hero(user_id, selfie_url, body_url=body_url)
+        stylized_url = result.get("url")
+        logger.info(f"Realistic hero ready for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Hero gen failed for {user_id}: {e}")
+        return
 
-    if not stylized_url:
+    if not stylized_url or still_only:
         return
 
     # Stage 2: video ----------------------------------------------------------
@@ -125,10 +119,11 @@ async def upload_selfie(
             user["id"], avatar_selfie_url=public_url, email=user["email"]
         )
 
-    # Auto-generate stylized hero avatar in the background when the primary
-    # selfie changes (so the Studio shows it as soon as the user lands there).
+    # Cheap profile refresh only (color/body/hair). The avatar/video are ON-DEMAND
+    # now - the user generates them via "Refresh my avatar", so we don't spend
+    # avatar/video credits automatically on upload.
     if becomes_primary:
-        background_tasks.add_task(_bg_generate_stylized, user["id"], public_url)
+        background_tasks.add_task(_bg_refresh_profile, user["id"], public_url)
 
     return {"selfie_url": public_url, "selfie_urls": selfies}
 
@@ -143,6 +138,40 @@ async def list_selfies(user = Depends(current_user)):
     return {"selfie_urls": urls, "primary_url": primary}
 
 
+@router.post("/upload-full-body")
+async def upload_full_body(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user = Depends(current_user),
+):
+    """Upload a full-body photo (for body-aware styling). Stored on users.full_body_url.
+    Kicks off a profile re-analysis using it (covers color + body + hair)."""
+    content = await file.read()
+    try:
+        validate_image_bytes(content, file.content_type or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    public_url = supabase_service.upload_to_storage(
+        bucket="selfies",
+        user_id=user["id"],
+        file_bytes=content,
+        filename=file.filename or "fullbody.jpg",
+        content_type=file.content_type or "image/jpeg",
+    )
+    supabase_service.upsert_user(user["id"], full_body_url=public_url, email=user["email"])
+    # Cheap profile refresh only (uses the full-body photo for body/hair). The avatar
+    # is ON-DEMAND - the user triggers it via "Refresh my avatar".
+    background_tasks.add_task(_bg_refresh_profile, user["id"], public_url)
+    return {"full_body_url": public_url}
+
+
+@router.get("/full-body")
+async def get_full_body(user = Depends(current_user)):
+    row = supabase_service.get_user(user["id"]) or {}
+    return {"full_body_url": row.get("full_body_url")}
+
+
 @router.post("/set-primary-selfie")
 async def set_primary_selfie(
     background_tasks: BackgroundTasks,
@@ -154,9 +183,8 @@ async def set_primary_selfie(
     if url not in selfies:
         raise HTTPException(404, "That selfie isn't in your list. Upload it first.")
     supabase_service.upsert_user(user["id"], avatar_selfie_url=url, email=user["email"])
-    # Regenerate stylized hero only if the primary actually changed
-    if row.get("stylized_avatar_source_selfie") != url:
-        background_tasks.add_task(_bg_generate_stylized, user["id"], url)
+    # Profile refresh only; the avatar is ON-DEMAND ("Refresh my avatar").
+    background_tasks.add_task(_bg_refresh_profile, user["id"], url)
     return {"primary_url": url, "needs_avatar_recreate": bool(row.get("avatar_character_id"))}
 
 
@@ -347,15 +375,17 @@ async def get_stylized_video(user = Depends(current_user)):
 @router.post("/regenerate-stylized")
 async def regenerate_stylized(
     background_tasks: BackgroundTasks,
+    video: bool = False,
     user = Depends(current_user),
 ):
-    """Manual trigger - re-runs stylized avatar gen against the current primary selfie."""
+    """On-demand 'Refresh my avatar'. Regenerates the realistic hero still (~5cr).
+    Pass ?video=true to also (re)generate the ramp-walking video (~60-100cr)."""
     row = supabase_service.get_user(user["id"]) or {}
-    selfie = row.get("avatar_selfie_url")
+    selfie = color_service.best_face_source(row)
     if not selfie:
-        raise HTTPException(400, "No primary selfie to stylize. Upload one first.")
-    background_tasks.add_task(_bg_generate_stylized, user["id"], selfie)
-    return {"queued": True, "source_selfie": selfie}
+        raise HTTPException(400, "No selfie or full-body photo to use. Upload one first.")
+    background_tasks.add_task(_bg_generate_stylized, user["id"], selfie, still_only=not video)
+    return {"queued": True, "with_video": video}
 
 
 @router.post("/sync-stylist-kb")

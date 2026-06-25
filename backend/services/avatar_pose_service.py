@@ -23,62 +23,196 @@ logger = logging.getLogger(__name__)
 # Shared with backend/scripts/animate_admin_stylist.py - both Aria and the
 # per-user stylized avatar use the same motion vocabulary so the dashboard
 # heroes look like they live in the same world.
+# Image-to-video: lead with MOTION (the still already carries the look), refer to
+# the subject generically, positive phrasing only. (Runway Image-to-Video guide.)
 RAMP_WALK_PROMPT = (
-    "Editorial 3D fashion runway: the character walks confidently forward "
-    "toward the camera in a smooth catwalk strut, model gait, subtle head "
-    "movement, gentle hair sway, soft cinematic camera tracking. Preserve "
-    "the stylized 3D character aesthetic from the source image exactly - "
-    "matte skin, polished 3D rendering, fashion forward styling. Clean "
-    "neutral warm grey studio background with subtle gold rim light. "
-    "Loopable seamless motion, 5 second cinematic clip, 8K fashion editorial."
+    "The subject walks confidently forward toward the camera in a smooth catwalk "
+    "strut with a natural model gait, subtle head movement and gentle hair sway, "
+    "as the camera tracks softly. The look, character style and warm grey studio "
+    "background from the source image stay consistent. Seamless loopable motion, "
+    "smooth cinematic 5 second fashion runway clip."
 )
 
 
-# Mirrors Aria's prompt aesthetic (editorial fashion 3D, gold rim light, warm
-# grey background) but full body and personalized via @selfie reference.
+# Photorealistic full-body editorial fashion photo, personalized via @selfie.
+# (Deliberately NOT 3D/CGI - that read as cartoonish.)
 STYLIZED_PROMPT = (
-    "Editorial 3D character full body standing portrait of the person from "
-    "@selfie, head to feet visible, confident relaxed posture, looking "
-    "forward. Stylized fashion illustration aesthetic in the style of high "
-    "end fashion brand CGI and luxury runway visuals, matching the look of "
-    "the StyleSense brand mascot. Sleek refined character design with "
-    "contemporary fashion forward styling, designer minimalist outfit in "
-    "muted neutral tones. Clean neutral warm grey studio background, soft "
-    "cinematic studio lighting with subtle gold rim light. Polished 3D "
-    "rendering, matte skin texture, sleek modern hair styling. The face, "
-    "skin tone, and overall likeness from @selfie are preserved while "
-    "rendered in this stylized 3D aesthetic. High quality character design, "
-    "elegant approachable confident."
+    "Photorealistic full-body editorial fashion photograph of the person from @selfie, "
+    "head to feet visible, standing in a confident relaxed pose, looking toward the camera. "
+    "The face must be UNMISTAKABLY the same person as @selfie - identical facial features, "
+    "facial hair / beard, eyebrows, hairstyle, hair color and skin tone. Do NOT idealize, "
+    "beautify, restyle or substitute the face; keep their real likeness exactly. "
+    "Wearing a designer minimalist outfit in muted neutral tones. Clean warm grey studio "
+    "backdrop, soft cinematic studio lighting with a subtle gold rim light, background in "
+    "sharp focus. Natural realistic skin texture with fine detail, sharp focus, "
+    "high-resolution fashion magazine quality, shot on a full-frame camera. Elegant, confident."
 )
+
+# When a full-body photo exists, anchor the real body/proportions from @body and
+# the face/likeness from @selfie (gen4 allows up to 3 references).
+STYLIZED_PROMPT_BODY = (
+    "Photorealistic full-body editorial fashion photograph, head to feet visible, confident "
+    "relaxed pose, looking toward the camera. The face must be UNMISTAKABLY the same person "
+    "as @selfie - identical facial features, facial hair / beard, eyebrows, hairstyle, hair "
+    "color and skin tone; do NOT idealize, beautify or substitute the face. Keep the real "
+    "body shape, height and proportions of the person in @body. Designer minimalist outfit in "
+    "muted neutral tones. Clean warm grey studio backdrop, soft cinematic lighting with a "
+    "subtle gold rim light, background in sharp focus. Natural realistic skin texture with "
+    "fine detail, high-resolution fashion magazine quality, shot on a full-frame camera."
+)
+
+
+async def _safe_ref(user_id: str, url: str) -> str:
+    """Ensure a reference photo's aspect ratio is within gen4's allowed range (pad if
+    needed, re-host the padded copy). Returns the original URL on no-op / any failure."""
+    from services import image_service
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+            r = await c.get(url)
+            r.raise_for_status()
+        padded = image_service.pad_to_ratio_range(r.content)
+        if padded is r.content or padded == r.content:
+            return url
+        return supabase_service.upload_to_storage(
+            bucket="selfies", user_id=user_id, file_bytes=padded,
+            filename="ref-padded.jpg", content_type="image/jpeg",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"_safe_ref failed for {url}: {e}")
+        return url
+
+
+async def generate_realistic_hero(
+    user_id: str,
+    selfie_url: str,
+    body_url: str | None = None,
+) -> dict:
+    """
+    Realistic, face-preserving Studio hero: manifest the user (via the gen4 try-on
+    approach that keeps their real face) in their most-recent wardrobe outfit, in a
+    premium studio setting. Uses BOTH the face selfie and, when present, the full-body
+    photo as references (gen4 tolerates the body ref - no clothing bleed). Saves
+    users.stylized_avatar_url. On-demand only (called by /regenerate-stylized).
+    """
+    from services import runway_service, image_service
+
+    # Pick an outfit: a recent dress, else recent top + bottom. None -> default look.
+    items = supabase_service.get_wardrobe_items(user_id) or []
+
+    def _first(cat):
+        return next((i for i in items if (i.get("category") or "").lower() == cat), None)
+
+    dress = _first("dresses")
+    chosen = [dress] if dress else [x for x in (_first("tops"), _first("bottoms")) if x]
+
+    garment_url, outfit_name = None, "a tailored minimalist outfit in muted neutral tones"
+    if len(chosen) == 1:
+        garment_url, outfit_name = chosen[0]["image_url"], chosen[0]["name"]
+    elif len(chosen) >= 2:
+        comp = runway_service.composite_product_collage([c["image_url"] for c in chosen])
+        garment_url = supabase_service.upload_to_storage(
+            "tryons", user_id, comp, "hero-outfit.jpg", "image/jpeg")
+        outfit_name = " + ".join(c["name"] for c in chosen)
+
+    # References (max 3 for gen4): selfie (+ body) + garment. Pad tall photos.
+    refs = [{"uri": await _safe_ref(user_id, selfie_url), "tag": "selfie"}]
+    if body_url and body_url != selfie_url:
+        refs.append({"uri": await _safe_ref(user_id, body_url), "tag": "body"})
+    if garment_url:
+        refs.append({"uri": garment_url, "tag": "garment"})
+
+    body_clause = (
+        "with the real body shape and proportions from @body " if len(refs) > 1 and refs[1]["tag"] == "body"
+        else ""
+    )
+    garment_clause = (
+        f"wearing the {outfit_name} from @garment (use ONLY the clothing from @garment, ignore any model in it)"
+        if garment_url else f"wearing {outfit_name}"
+    )
+    prompt = (
+        f"Photorealistic full-body editorial fashion photograph of the person from @selfie - "
+        f"preserve their exact face, facial hair, eyebrows, hairstyle, hair color and skin tone - "
+        f"{body_clause}{garment_clause}. Premium fashion studio: clean warm grey backdrop, soft "
+        f"cinematic lighting with a subtle gold rim light, background in sharp focus. Natural realistic "
+        f"skin texture, magazine quality, full-frame camera. Confident relaxed pose, head to feet."
+    )[:1000]
+
+    try:
+        supabase_service.upsert_user(
+            user_id, stylized_avatar_status="generating",
+            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero",
+        )
+    except Exception as e:
+        logger.warning(f"Could not mark hero generating: {e}")
+
+    try:
+        task = runway_client.text_to_image.create(
+            model="gen4_image", prompt_text=prompt, ratio="720:1280", reference_images=refs[:3],
+        ).wait_for_task_output(timeout=240)
+    except (TaskFailedError, TaskTimeoutError) as e:
+        try:
+            supabase_service.upsert_user(user_id, stylized_avatar_status="failed")
+        except Exception:
+            pass
+        raise RuntimeError(f"Hero generation failed: {e}")
+
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+        img = await c.get(task.output[0])
+        img.raise_for_status()
+    permanent_url = supabase_service.upload_to_storage(
+        "selfies", user_id, img.content, "hero.jpg", "image/jpeg")
+
+    try:
+        supabase_service.upsert_user(
+            user_id, stylized_avatar_url=permanent_url, stylized_avatar_status="ready",
+            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero",
+        )
+    except Exception as e:
+        logger.warning(f"Could not save hero url: {e}")
+    return {"url": permanent_url}
 
 
 async def generate_stylized_avatar(
     user_id: str,
     selfie_url: str,
+    body_url: str | None = None,
 ) -> dict:
     """
-    Generate a stylized editorial-3D full-body avatar from a selfie. Persists
-    on the users row. Returns {url, source_selfie} on success, raises on failure.
+    Generate a stylized editorial-3D full-body avatar. Uses the face selfie for
+    likeness and, when provided, a full-body photo for real body proportions
+    (gen4 multi-reference). Persists on the users row. Returns {url, source_selfie}.
 
     Idempotent: caller is responsible for skipping if a stylized avatar
-    already exists for this selfie source.
+    already exists for this (selfie, body) source.
     """
+    # Idempotence token: busts the cache when either the selfie OR the body photo changes.
+    src_token = f"{selfie_url}|{body_url or ''}"
+
     # Mark generating so the frontend can show a spinner
     try:
         supabase_service.upsert_user(
             user_id,
             stylized_avatar_status="generating",
-            stylized_avatar_source_selfie=selfie_url,
+            stylized_avatar_source_selfie=src_token,
         )
     except Exception as e:
         logger.warning(f"Could not mark stylized_avatar_status (column missing?): {e}")
 
+    if body_url and body_url != selfie_url:
+        prompt = STYLIZED_PROMPT_BODY
+        # Pad a tall body photo into gen4's allowed ratio range, else it 400s.
+        safe_body = await _safe_ref(user_id, body_url)
+        references = [{"uri": selfie_url, "tag": "selfie"}, {"uri": safe_body, "tag": "body"}]
+    else:
+        prompt = STYLIZED_PROMPT
+        references = [{"uri": selfie_url, "tag": "selfie"}]
+
     try:
         task = runway_client.text_to_image.create(
             model="gen4_image",
-            prompt_text=STYLIZED_PROMPT,
+            prompt_text=prompt,
             ratio="720:1280",
-            reference_images=[{"uri": selfie_url, "tag": "selfie"}],
+            reference_images=references,
         ).wait_for_task_output(timeout=240)
     except TaskFailedError as e:
         logger.error(f"Stylized avatar gen failed: {e.task_details}")
@@ -115,12 +249,12 @@ async def generate_stylized_avatar(
             user_id,
             stylized_avatar_url=permanent_url,
             stylized_avatar_status="ready",
-            stylized_avatar_source_selfie=selfie_url,
+            stylized_avatar_source_selfie=src_token,
         )
     except Exception as e:
         logger.warning(f"Could not save stylized_avatar_url (column missing?): {e}")
 
-    return {"url": permanent_url, "source_selfie": selfie_url}
+    return {"url": permanent_url, "source_selfie": src_token}
 
 
 async def generate_stylized_video(

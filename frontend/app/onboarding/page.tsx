@@ -23,6 +23,8 @@ export default function OnboardingPage() {
   const [selfies, setSelfies] = useState<string[]>([]);
   const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [fullBodyUrl, setFullBodyUrl] = useState<string | null>(null);
+  const [uploadingFull, setUploadingFull] = useState(false);
   const tipsSeen = useSeenOnce("onboarding-tips");
 
   const refreshSelfies = useCallback(async () => {
@@ -41,7 +43,25 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!user) return;
     refreshSelfies();
+    apiGet<{ full_body_url: string | null }>("/api/avatar/full-body")
+      .then((d) => setFullBodyUrl(d.full_body_url))
+      .catch(() => {});
   }, [user, refreshSelfies]);
+
+  async function handleUploadFullBody(file: File) {
+    setUploadingFull(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await apiUpload<{ full_body_url: string }>("/api/avatar/upload-full-body", fd);
+      setFullBodyUrl(res.full_body_url);
+      toast.success("Full-body photo uploaded — Aria will style for your body type.");
+    } catch (e) {
+      toast.error(`Upload failed: ${e instanceof Error ? e.message : "unknown"}`);
+    } finally {
+      setUploadingFull(false);
+    }
+  }
 
   async function handleUpload(file: File) {
     setUploading(true);
@@ -179,6 +199,32 @@ export default function OnboardingPage() {
         )}
       </motion.section>
 
+      {/* Full-body photo (optional) - powers body-aware styling + a true-to-you avatar */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="surface p-7 mb-5"
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+            style={{
+              background: fullBodyUrl ? "var(--gold)" : "var(--surface3)",
+              color: fullBodyUrl ? "var(--on-gold)" : "var(--text-dim)",
+            }}
+          >
+            {fullBodyUrl ? <Check size={16} /> : "2"}
+          </div>
+          <h2 className="font-display text-2xl">Full-body photo <span className="text-sm" style={{ color: "var(--text-muted)" }}>· optional</span></h2>
+        </div>
+        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+          A clear head-to-toe photo lets Aria style for your real body type &amp; proportions, and makes
+          your Studio avatar look truly like you. Your selfie still drives your face in try-ons.
+        </p>
+        <BodyDropzone onFile={handleUploadFullBody} loading={uploadingFull} preview={fullBodyUrl} />
+      </motion.section>
+
       {/* Stylist info card - no setup needed, always available */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -212,6 +258,37 @@ export default function OnboardingPage() {
         onConfirm={() => { if (pendingDelete) removeSelfie(pendingDelete); }}
       />
     </div>
+  );
+}
+
+function BodyDropzone({
+  onFile, loading, preview,
+}: {
+  onFile: (f: File) => void; loading: boolean; preview: string | null;
+}) {
+  return (
+    <label
+      className="surface flex items-center justify-center cursor-pointer overflow-hidden"
+      style={{ width: 150, height: 220, borderStyle: preview ? "solid" : "dashed" }}
+    >
+      {loading ? (
+        <Loader2 size={26} className="spin" style={{ color: "var(--gold)" }} />
+      ) : preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="Full-body preview" className="w-full h-full" style={{ objectFit: "contain" }} />
+      ) : (
+        <div className="text-center px-3" style={{ color: "var(--text-dim)" }}>
+          <Camera size={26} className="mx-auto mb-2" />
+          <div className="text-xs">Add a full-body photo</div>
+        </div>
+      )}
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+      />
+    </label>
   );
 }
 

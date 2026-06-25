@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS users (
   -- v2g
   color_profile                   JSONB,
   color_profile_source_selfie     TEXT,
+  -- full-body photo for body-aware styling (selfie stays the face source for try-on)
+  full_body_url                   TEXT,
   created_at                      TIMESTAMPTZ DEFAULT NOW(),
   updated_at                      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS wardrobe_items (
   image_url         TEXT NOT NULL,
   source_url        TEXT,
   thumbnail_url     TEXT,
+  cutout_url        TEXT,        -- transparent PNG for the closet display (try-on uses image_url)
   created_at        TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -97,6 +97,8 @@ def _extra_selfies(user_id: str, primary: str, model: str) -> list:
 
 @router.post("/generate")
 async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
+    if not req.avatar_selfie_url:
+        raise HTTPException(400, "Add a selfie or full-body photo in Avatar Setup first.")
     if "localhost" in req.avatar_selfie_url or "localhost" in req.item_image_url:
         raise HTTPException(400, "URLs must be public HTTPS, not localhost. Upload to Supabase first.")
 
@@ -148,6 +150,8 @@ async def generate_tryon(req: TryOnRequest, user = Depends(current_user)):
 
 @router.post("/generate-multi")
 async def generate_multi_tryon(req: MultiItemTryOnRequest, user = Depends(current_user)):
+    if not req.avatar_selfie_url:
+        raise HTTPException(400, "Add a selfie or full-body photo in Avatar Setup first.")
     if not req.items:
         raise HTTPException(400, "Need at least one item.")
     if len(req.items) > 6:

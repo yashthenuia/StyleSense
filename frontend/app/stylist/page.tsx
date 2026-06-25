@@ -2,9 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, Sparkles, MessageCircle, Mic } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { Send, Loader2, Sparkles, MessageCircle, Mic, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
+import { useAriaChat } from "@/store/ariaChat";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
@@ -23,23 +25,64 @@ export default function StylistPage() {
   const { user, profile } = useAuth();
   const firstName = profile?.full_name?.split(" ")[0];
   const [tab, setTab] = useState<"chat" | "voice">("chat");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: firstName
-        ? `Hey ${firstName}, I've studied every piece in your closet. What vibe are we creating today?`
-        : "Hey — I've studied every piece in your closet. What vibe are we creating today?",
-    },
-  ]);
+  // Chat history persists across navigation/reload (zustand + localStorage).
+  const { messages, setMessages, reset } = useAriaChat();
+  const greeting = (): ChatMessage => ({
+    role: "assistant",
+    content: firstName
+      ? `Hey ${firstName}, I've studied every piece in your closet. What vibe are we creating today?`
+      : "Hey — I've studied every piece in your closet. What vibe are we creating today?",
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<WardrobeItem[]>([]);
+  const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Seed the greeting only when there's no existing conversation.
+  useEffect(() => {
+    if (messages.length === 0) setMessages([greeting()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, firstName]);
+
+  function startNewChat() {
+    reset();
+    setMessages([greeting()]);
+  }
 
   useEffect(() => {
     if (!user) return;
     apiGet<WardrobeItem[]>(`/api/wardrobe`).then(setItems).catch(() => {});
+    // Face source for "Manifest": prefer the selfie, fall back to the full-body photo.
+    Promise.all([
+      apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies").catch(() => null),
+      apiGet<{ full_body_url: string | null }>("/api/avatar/full-body").catch(() => null),
+    ]).then(([s, b]) => {
+      setSelfieUrl(s?.primary_url || s?.selfie_urls?.[0] || b?.full_body_url || null);
+    });
   }, [user]);
+
+  // Generate a try-on of Aria's recommended look, shown inline in that chat bubble.
+  async function manifestLook(idx: number) {
+    const msg = messages[idx];
+    const picked = items.filter((it) => (msg.suggestedItemIds || []).includes(it.id));
+    if (picked.length === 0) return;
+    if (!selfieUrl) { toast.error("Add a selfie in Avatar Setup first."); return; }
+    setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: true } : m)));
+    try {
+      const res = await apiPost<{ result_image_url: string }>("/api/tryon/generate-multi", {
+        avatar_selfie_url: selfieUrl,
+        items: picked.map((it) => ({ image_url: it.image_url, name: it.name, category: it.category })),
+        model: useAppStore.getState().tryonModel,
+        setting: msg.scene || undefined,
+        enhance_prompt: true,
+      });
+      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: false, manifestUrl: res.result_image_url } : m)));
+    } catch (e) {
+      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: false } : m)));
+      toast.error(`Manifest failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -53,13 +96,13 @@ export default function StylistPage() {
     setInput("");
     setLoading(true);
     try {
-      const res = await apiPost<{ reply: string; suggested_item_ids: string[] }>(
+      const res = await apiPost<{ reply: string; suggested_item_ids: string[]; scene?: string | null }>(
         "/api/stylist/chat",
         {
           messages: next.map((m) => ({ role: m.role, content: m.content })),
         }
       );
-      setMessages((prev) => [...prev, { role: "assistant", content: res.reply, suggestedItemIds: res.suggested_item_ids }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: res.reply, suggestedItemIds: res.suggested_item_ids, scene: res.scene }]);
     } catch (e) {
       toast.error(`Stylist failed: ${e instanceof Error ? e.message : "unknown"}`);
     } finally {
@@ -97,6 +140,19 @@ export default function StylistPage() {
         <div className="col-span-8">
           {tab === "chat" ? (
             <div className="surface flex flex-col" style={{ height: 620 }}>
+              <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
+                <span className="text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  Chat with Aria
+                </span>
+                <button
+                  onClick={startNewChat}
+                  className="text-xs flex items-center gap-1"
+                  style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
+                  title="Start a new conversation"
+                >
+                  <Plus size={12} /> New chat
+                </button>
+              </div>
               <div ref={scrollRef} className="flex-1 overflow-auto p-6 space-y-4">
                 <AnimatePresence>
                   {messages.map((m, i) => (
@@ -112,13 +168,16 @@ export default function StylistPage() {
                           background: m.role === "user" ? "var(--gold-dim)" : "var(--surface2)",
                           border: m.role === "user" ? "1px solid var(--border-gold)" : "1px solid var(--border)",
                           color: "var(--text)",
-                          whiteSpace: "pre-wrap",
+                          whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
                         }}
                       >
                         <FormattedReply
                           content={m.content}
                           itemIds={m.suggestedItemIds || []}
                           items={items}
+                          manifesting={!!m.manifesting}
+                          manifestUrl={m.manifestUrl}
+                          onManifest={selfieUrl ? () => manifestLook(i) : undefined}
                         />
                       </div>
                     </motion.div>
@@ -238,13 +297,34 @@ export default function StylistPage() {
   );
 }
 
-function FormattedReply({ content, itemIds, items }: { content: string; itemIds: string[]; items: WardrobeItem[] }) {
+function FormattedReply({
+  content, itemIds, items, manifesting, manifestUrl, onManifest,
+}: {
+  content: string;
+  itemIds: string[];
+  items: WardrobeItem[];
+  manifesting?: boolean;
+  manifestUrl?: string;
+  onManifest?: () => void;
+}) {
   // Strip the [ITEM:id] tokens from the displayed text but show them as cards below
   const stripped = content.replace(/\s*\[ITEM:[a-zA-Z0-9\-]+\]/g, "");
   const referenced = items.filter((it) => itemIds.includes(it.id));
   return (
     <div>
-      <div>{stripped}</div>
+      <div className="aria-md">
+        <ReactMarkdown
+          components={{
+            p: ({ children }) => <p style={{ margin: "0 0 0.5rem" }}>{children}</p>,
+            ul: ({ children }) => <ul style={{ margin: "0.25rem 0 0.5rem", paddingLeft: "1.1rem", listStyle: "disc" }}>{children}</ul>,
+            ol: ({ children }) => <ol style={{ margin: "0.25rem 0 0.5rem", paddingLeft: "1.2rem" }}>{children}</ol>,
+            li: ({ children }) => <li style={{ margin: "0.1rem 0" }}>{children}</li>,
+            strong: ({ children }) => <strong style={{ color: "var(--gold)" }}>{children}</strong>,
+          }}
+        >
+          {stripped}
+        </ReactMarkdown>
+      </div>
       {referenced.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-3">
           {referenced.map((it) => (
@@ -256,11 +336,36 @@ function FormattedReply({ content, itemIds, items }: { content: string; itemIds:
               style={{ background: "var(--surface3)", color: "var(--text)", textDecoration: "none" }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={it.image_url} alt={it.name} style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+              <img src={it.cutout_url || it.image_url} alt={it.name} style={{ width: 24, height: 24, objectFit: "contain", borderRadius: 4 }} />
               <span>{it.name}</span>
-              <span style={{ color: "var(--gold)" }}>Try on →</span>
             </Link>
           ))}
+        </div>
+      )}
+
+      {referenced.length > 0 && onManifest && (
+        <div className="mt-3">
+          {manifestUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={manifestUrl}
+              alt="Your look"
+              style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }}
+            />
+          ) : (
+            <button
+              className="btn-primary"
+              onClick={onManifest}
+              disabled={manifesting}
+              style={{ padding: "0.5rem 0.9rem", fontSize: "0.8rem" }}
+            >
+              {manifesting ? (
+                <><Loader2 size={14} className="spin" /> Manifesting your look…</>
+              ) : (
+                <><Sparkles size={14} /> Manifest this look</>
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

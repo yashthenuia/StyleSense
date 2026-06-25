@@ -9,6 +9,7 @@ The helper returns plain dicts so it is a drop-in for the previous Supabase
 """
 import os
 import logging
+import uuid
 from typing import Any, Optional
 
 from sqlalchemy import create_engine, event, text
@@ -92,5 +93,20 @@ def query(sql: str, params: Optional[dict] = None, fetch: str = "all") -> Any:
             return None
         if fetch == "one":
             row = result.first()
-            return dict(row._mapping) if row else None
-        return [dict(r._mapping) for r in result.fetchall()]
+            return _row_to_dict(row) if row else None
+        return [_row_to_dict(r) for r in result.fetchall()]
+
+
+def _coerce(v: Any) -> Any:
+    # psycopg2 returns UUID columns as uuid.UUID objects; the old Supabase client
+    # returned strings. Coerce back to str so id comparisons (e.g. ownership checks)
+    # and JSON keys behave exactly as before. Handles UUID[] columns (lists) too.
+    if isinstance(v, uuid.UUID):
+        return str(v)
+    if isinstance(v, list):
+        return [str(x) if isinstance(x, uuid.UUID) else x for x in v]
+    return v
+
+
+def _row_to_dict(row) -> dict:
+    return {k: _coerce(v) for k, v in row._mapping.items()}

@@ -151,6 +151,8 @@ class StylistChatRequest(BaseModel):
 class StylistChatResponse(BaseModel):
     reply: str
     suggested_item_ids: List[str] = []
+    occasion: Optional[str] = None
+    scene: Optional[str] = None  # try-on background for "Manifest this look"
 
 
 # ─────────────────────────── FRIENDS / CHAT ─────────────────────────── #

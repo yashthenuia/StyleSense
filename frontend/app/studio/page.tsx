@@ -67,7 +67,30 @@ export default function StudioPage() {
   const [showFacePicker, setShowFacePicker] = useState(false);
   const [customFaceUrl, setCustomFaceUrl] = useState("");
   const [uploadingFace, setUploadingFace] = useState(false);
+  const [refreshingAvatar, setRefreshingAvatar] = useState(false);
   const taskHintSeen = useSeenOnce("studio-task-hint");
+
+  // On-demand "Refresh my avatar": regenerates the realistic hero still (~5cr) + polls.
+  async function refreshAvatar() {
+    if (refreshingAvatar) return;
+    setRefreshingAvatar(true);
+    setStylized(stylizedAvatarUrl, "generating" as never);
+    try {
+      await apiPost("/api/avatar/regenerate-stylized", {}); // still only (no video)
+      toast.success("Refreshing your avatar…");
+      for (let i = 0; i < 24; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const d = await apiGet<{ url: string | null; status: string }>("/api/avatar/stylized");
+        setStylized(d.url, d.status as never);
+        if (d.status === "ready" || d.status === "failed") break;
+      }
+    } catch (e) {
+      setStylized(stylizedAvatarUrl, "failed" as never);
+      toast.error(`Refresh failed: ${e instanceof Error ? e.message : "unknown"}`);
+    } finally {
+      setRefreshingAvatar(false);
+    }
+  }
 
   async function handleFaceUpload(file: File) {
     setUploadingFace(true);
@@ -366,11 +389,22 @@ export default function StudioPage() {
                         className="px-3 py-1 rounded-full mb-2"
                         style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)", color: "var(--gold)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase" }}
                       >
-                        {stylizedAvatarUrl ? "Your editorial avatar" : "Your starting point"}
+                        {stylizedAvatarUrl ? "Your avatar" : "Your starting point"}
                       </div>
                       <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
                         Pick items + click Generate
                       </div>
+                      {stylizedAvatarStatus !== "generating" && (
+                        <button
+                          onClick={refreshAvatar}
+                          disabled={refreshingAvatar}
+                          className="mt-2 text-xs flex items-center gap-1"
+                          style={{ background: "rgba(20,14,10,0.55)", border: "1px solid var(--border-gold)", color: "#f3e8d4", borderRadius: 999, padding: "0.3rem 0.7rem", cursor: "pointer" }}
+                          title="Regenerate a realistic photo of you in your latest outfit (~5 credits)"
+                        >
+                          <RefreshCw size={11} /> {refreshingAvatar ? "Refreshing…" : "Refresh my avatar"}
+                        </button>
+                      )}
                       {!taskHintSeen && (
                         <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                           You can navigate away — task keeps running

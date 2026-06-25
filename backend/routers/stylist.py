@@ -35,7 +35,12 @@ async def chat(req: StylistChatRequest, user = Depends(current_user)):
     except Exception as e:
         raise HTTPException(500, f"Stylist failed: {e}")
 
-    return StylistChatResponse(reply=result["reply"], suggested_item_ids=result["item_ids"])
+    return StylistChatResponse(
+        reply=result["reply"],
+        suggested_item_ids=result["item_ids"],
+        occasion=result.get("occasion"),
+        scene=result.get("scene"),
+    )
 
 
 @router.get("/color-profile")
@@ -49,7 +54,7 @@ async def get_color_profile(user = Depends(current_user)):
 async def refresh_color_profile(user = Depends(current_user)):
     """Force a fresh color analysis from the user's primary selfie and cache it."""
     row = supabase_service.get_user(user["id"]) or {}
-    selfie = row.get("selfie_url") or (row.get("selfie_urls") or [None])[0]
+    selfie = color_service.best_profile_source(row)
     if not selfie:
         raise HTTPException(400, "No selfie on file. Upload one in Avatar Setup first.")
     profile = await _run_blocking(color_service.analyze_color_profile, selfie)

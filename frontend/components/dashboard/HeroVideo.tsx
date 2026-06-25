@@ -73,7 +73,7 @@ export function HeroVideo() {
     setTriggering(true);
     setStylizedVideo(null, "generating" as never);
     try {
-      await apiPost("/api/avatar/regenerate-stylized", {});
+      await apiPost("/api/avatar/regenerate-stylized?video=true", {});
       toast.success("Generating your ramp video... ~60s.");
     } catch (e) {
       setStylizedVideo(null, "failed" as never);

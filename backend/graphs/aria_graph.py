@@ -29,26 +29,76 @@ class AriaState(TypedDict, total=False):
     wardrobe: list
     color_profile: Optional[dict]
     occasion: Optional[str]
+    scene: Optional[str]
     kb_snippets: list
     reply: str
     item_ids: list
 
 
-SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist for the user. You give specific, warm, honest, concise advice (2-4 sentences plus a short list when suggesting outfits).
+# Maps a detected occasion to a rich try-on background, used when the user clicks
+# "Manifest this look" in chat so the generated photo matches the event they asked about.
+_OCCASION_SCENE = {
+    "beach wedding": "at a beach wedding by the sea at golden hour, soft warm light",
+    "formal": "at an elegant black-tie gala in a grand ballroom, refined lighting",
+    "wedding guest": "at a stylish wedding reception, soft romantic lighting",
+    "office": "in a bright modern office, clean professional setting",
+    "office party": "at a stylish office holiday party, warm ambient evening light",
+    "interview": "in a modern office lobby for a job interview, crisp daylight",
+    "business": "in a sleek corporate setting, polished professional lighting",
+    "date": "at an intimate candlelit restaurant on a date night, warm mood lighting",
+    "dinner": "at an upscale restaurant in the evening, warm ambient light",
+    "cocktail": "at a chic rooftop cocktail party at night, city lights bokeh",
+    "evening": "at an elegant evening event, moody dramatic lighting",
+    "party": "at a lively party with warm colorful lighting",
+    "brunch": "at a sunny garden brunch, bright airy daylight",
+    "casual": "on a relaxed city street in soft daylight",
+    "weekend": "on a casual weekend outing, natural daylight",
+    "gym": "in a modern fitness studio, bright clean light",
+    "sport": "in an athletic outdoor setting, bright natural light",
+    "beach": "on a sunny beach with soft ocean light",
+    "vacation": "on a scenic vacation backdrop, bright golden light",
+}
 
-# RULES
-- Recommend items that exist in the wardrobe by exact name, and tag each as `[ITEM:<id>]` so the UI can make it clickable. Example: "Try the Navy blazer [ITEM:abc-123] with the cream chinos [ITEM:def-456]."
-- Use the user's COLOR PROFILE: prefer their flattering colors, steer away from their avoid colors, and say *why* a piece suits them.
-- Use the STYLING KNOWLEDGE for color/occasion guidance. Don't quote it verbatim; apply it.
-- If the wardrobe is empty, suggest adding items first. If asked something you can't know (e.g. weather), say so.
 
-# USER'S COLOR PROFILE
+def _scene_for_occasion(occasion: Optional[str], user_text: str) -> Optional[str]:
+    """Best-effort try-on background for a detected occasion (None -> Studio default)."""
+    if occasion and occasion in _OCCASION_SCENE:
+        return _OCCASION_SCENE[occasion]
+    t = (user_text or "").lower()
+    for key, scene in _OCCASION_SCENE.items():
+        if key in t:
+            return scene
+    return None
+
+
+SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist for the user. Warm, specific, honest, concise.
+
+# HOW TO RECOMMEND
+- START FROM THE OCCASION and its dress code, then build a COMPLETE outfit appropriate to it
+  (top + bottom, or a dress, plus a layer / shoes / one accessory when relevant) - not a single item.
+- VARY BY OCCASION: a formal event, a beach day and a casual brunch must get clearly DIFFERENT outfits.
+  Never default to the same hero piece for every occasion. If one item genuinely works for several
+  occasions, style it DIFFERENTLY each time and say how (layers, tuck, shoes, accessories).
+- Recommend real wardrobe items by exact name, tagging each `[ITEM:<id>]` so the UI makes it clickable.
+- The STYLE PROFILE is a REFINEMENT, not the selector: among the occasion-appropriate pieces, prefer
+  ones in their flattering colors and silhouettes for their body type; briefly say why.
+- GAPS: if the wardrobe can't cover the occasion, recommend the specific garment TYPES to add
+  (e.g. "a tailored navy blazer") with one reason each - while still tagging items that DO work.
+- If body type is "unknown", give solid general advice and gently suggest adding a full-body photo in
+  Avatar Setup. If the wardrobe is empty, name the key pieces to add. If you can't know something
+  (e.g. weather), say so.
+
+# FORMAT (render as Markdown)
+- One short intro line, then a bulleted outfit list (ONE piece per bullet), then ONE short styling tip.
+- Use **bold** only for the key pieces. Keep the whole reply under ~120 words.
+
+# USER'S STYLE PROFILE
 {color_profile}
 
-# STYLING KNOWLEDGE (reference)
+# STYLING KNOWLEDGE (reference, research-grounded)
 {kb}
 
-# USER'S WARDROBE
+# USER'S WARDROBE (each item shows category + occasion - match them to the asked occasion)
 {wardrobe}
 """
 
@@ -60,11 +110,8 @@ def _ensure_profile(state: AriaState) -> dict:
     cached = user.get("color_profile")
     if cached:
         return {"color_profile": cached}
-    # Derive from the primary selfie if available
-    selfie = user.get("selfie_url")
-    if not selfie:
-        selfies = user.get("selfie_urls") or []
-        selfie = selfies[0] if selfies else None
+    # Derive from the best available photo (full-body preferred, else selfie)
+    selfie = color_service.best_profile_source(user)
     if not selfie:
         return {}
     profile = color_service.analyze_color_profile(selfie)
@@ -87,7 +134,9 @@ def _last_user_text(messages: list) -> str:
 
 
 def _detect_occasion(state: AriaState) -> dict:
-    return {"occasion": style_kb.detect_occasion(_last_user_text(state.get("messages", [])))}
+    text = _last_user_text(state.get("messages", []))
+    occasion = style_kb.detect_occasion(text)
+    return {"occasion": occasion, "scene": _scene_for_occasion(occasion, text)}
 
 
 def _retrieve_kb(state: AriaState) -> dict:
@@ -116,6 +165,7 @@ def _advise(state: AriaState) -> dict:
     resp = anthropic_service.client.messages.create(
         model=anthropic_service.MODEL,
         max_tokens=512,
+        temperature=0.7,  # a little variety so occasions don't collapse to one outfit
         system=system,
         messages=msgs,
     )
@@ -148,4 +198,5 @@ def run_aria(user_id: str, messages: list, wardrobe: list) -> dict:
         "item_ids": out.get("item_ids", []),
         "color_profile": out.get("color_profile"),
         "occasion": out.get("occasion"),
+        "scene": out.get("scene"),
     }

@@ -70,6 +70,12 @@ def retrieve(
         undertone_block = kb.get("undertones", {}).get(undertone)
         if undertone_block:
             snippets.append(undertone_block["text"])
+        # Body-type block (research-grounded), with its citation appended.
+        body = (color_profile.get("body_type") or "").strip().lower()
+        body_block = kb.get("body_types", {}).get(body)
+        if body_block:
+            src = body_block.get("source")
+            snippets.append(body_block["text"] + (f" [source: {src}]" if src else ""))
 
     # Occasion block: explicit match first, else keyword match against the query
     occasions = kb.get("occasions", {})

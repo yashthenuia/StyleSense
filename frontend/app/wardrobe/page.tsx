@@ -2,17 +2,20 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Plus, Trash2, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
+import { Plus, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
+import { ClosetShelf } from "@/components/wardrobe/ClosetShelf";
 import type { WardrobeItem, DetectedItem } from "@/types";
 
 const CATEGORIES = ["all", "tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"];
 const OCCASIONS = ["any", "casual", "formal", "evening", "sport", "beach"];
+// Fixed display order for the closet shelves (boutique-style top-to-bottom).
+const SHELF_ORDER = ["tops", "outerwear", "bottoms", "dresses", "shoes", "accessories"];
 
 export default function WardrobePage() {
   const { user } = useAuth();
@@ -87,9 +90,17 @@ export default function WardrobePage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="surface aspect-[3/4] shimmer" />
+        <div className="closet">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="mb-6">
+              <div className="shimmer" style={{ height: 18, width: 120, borderRadius: 6, marginBottom: 12, opacity: 0.4 }} />
+              <div className="flex gap-5">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <div key={j} className="shimmer" style={{ width: 140, height: 180, borderRadius: 8, opacity: 0.25 }} />
+                ))}
+              </div>
+              <div className="closet-plank" />
+            </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -103,55 +114,19 @@ export default function WardrobePage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
-          <AnimatePresence>
-            {filtered.map((item, i) => {
-              const selected = selectedItemIds.includes(item.id);
-              return (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="surface surface-hover overflow-hidden cursor-pointer relative group"
-                  style={{ borderColor: selected ? "var(--gold)" : undefined }}
-                  onClick={() => toggleSelected(item.id)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image_url}
-                    alt={item.name}
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                  {selected && (
-                    <div
-                      className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs"
-                      style={{ background: "var(--gold)", color: "var(--on-gold)" }}
-                    >
-                      {selectedItemIds.indexOf(item.id) + 1}
-                    </div>
-                  )}
-                  <div className="px-4 py-3">
-                    <div className="text-sm truncate" title={item.name}>{item.name}</div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs" style={{ color: "var(--text-dim)" }}>
-                        {item.category}{item.color ? ` · ${item.color}` : ""}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition"
-                        style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
-                        onClick={(e) => { e.stopPropagation(); setPendingDelete(item); }}
-                        aria-label="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+        <div className="closet">
+          {SHELF_ORDER
+            .filter((cat) => filterCategory === "all" || filterCategory === cat)
+            .map((cat) => (
+              <ClosetShelf
+                key={cat}
+                label={cat}
+                items={filtered.filter((it) => it.category === cat)}
+                selectedItemIds={selectedItemIds}
+                onSelect={toggleSelected}
+                onDelete={(item) => setPendingDelete(item)}
+              />
+            ))}
         </div>
       )}
       </div>

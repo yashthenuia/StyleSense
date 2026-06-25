@@ -115,14 +115,15 @@ def insert_wardrobe_item(
     brand: Optional[str] = None,
     source_url: Optional[str] = None,
     tags: Optional[list] = None,
+    cutout_url: Optional[str] = None,
 ) -> dict:
     return db.query(
         """
         INSERT INTO wardrobe_items
-            (user_id, name, category, occasion, color, brand, image_url, source_url, tags)
+            (user_id, name, category, occasion, color, brand, image_url, source_url, tags, cutout_url)
         VALUES
             (:user_id, :name, :category, :occasion, :color, :brand, :image_url,
-             :source_url, (:tags)::text[])
+             :source_url, (:tags)::text[], :cutout_url)
         RETURNING *
         """,
         {
@@ -135,6 +136,7 @@ def insert_wardrobe_item(
             "image_url": image_url,
             "source_url": source_url,
             "tags": tags or [],
+            "cutout_url": cutout_url,
         },
         fetch="one",
     )
