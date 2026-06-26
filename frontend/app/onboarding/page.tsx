@@ -1,15 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Loader2, Camera, Star, Trash2, Plus, Sparkles, Check } from "lucide-react";
-import Link from "next/link";
+import { Loader2, Star, Trash2, Plus, Camera } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiUpload, apiDelete } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { useSeenOnce } from "@/lib/useSeenOnce";
+
+const DICEBEAR_SEEDS = ["Felix", "Mia", "Jordan", "Alex", "Sam", "Taylor"];
 
 interface SelfieListResponse {
   selfie_urls: string[];
@@ -18,14 +17,15 @@ interface SelfieListResponse {
 
 export default function OnboardingPage() {
   const { user } = useAuth();
-  const { avatarSelfieUrl, setSelfieOnly } = useAppStore();
+  const {
+    avatarSelfieUrl, setSelfieOnly,
+    bodyType, setBodyType, setBodyPhotoUrl, bodyPhotoUrl,
+  } = useAppStore();
   const [uploading, setUploading] = useState(false);
   const [selfies, setSelfies] = useState<string[]>([]);
   const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const [fullBodyUrl, setFullBodyUrl] = useState<string | null>(null);
-  const [uploadingFull, setUploadingFull] = useState(false);
-  const tipsSeen = useSeenOnce("onboarding-tips");
+  const [selectedSeed, setSelectedSeed] = useState<string | null>(null);
 
   const refreshSelfies = useCallback(async () => {
     try {
@@ -34,10 +34,9 @@ export default function OnboardingPage() {
       setPrimaryUrl(data.primary_url);
       if (data.primary_url && data.primary_url !== avatarSelfieUrl) {
         setSelfieOnly(data.primary_url);
+        setSelectedSeed(null);
       }
-    } catch {
-      // v2d migration may not be applied; selfie list endpoint silently no-ops
-    }
+    } catch {}
   }, [avatarSelfieUrl, setSelfieOnly]);
 
   useEffect(() => {
@@ -82,13 +81,11 @@ export default function OnboardingPage() {
     }
   }
 
-  async function setPrimary(url: string) {
+  async function handleSetPrimary(url: string) {
     try {
       const fd = new FormData();
       fd.append("url", url);
-      const res = await apiUpload<{ primary_url: string }>(
-        "/api/avatar/set-primary-selfie", fd
-      );
+      const res = await apiUpload<{ primary_url: string }>("/api/avatar/set-primary-selfie", fd);
       setPrimaryUrl(res.primary_url);
       setSelfieOnly(res.primary_url);
       toast.success("Primary selfie updated.");
@@ -97,7 +94,7 @@ export default function OnboardingPage() {
     }
   }
 
-  async function removeSelfie(url: string) {
+  async function handleDelete(url: string) {
     try {
       await apiDelete<{ selfie_urls: string[]; primary_url: string | null }>(
         `/api/avatar/selfie?url=${encodeURIComponent(url)}`
@@ -109,144 +106,224 @@ export default function OnboardingPage() {
     }
   }
 
+  function selectDicebear(seed: string) {
+    setSelectedSeed(seed);
+    setSelfieOnly(`https://api.dicebear.com/10.x/open-peeps/svg?seed=${seed}`);
+  }
+
+  function handleBodyPhoto(file: File) {
+    const url = URL.createObjectURL(file);
+    setBodyPhotoUrl(url);
+    setBodyType(null);
+  }
+
+  const slotHint =
+    selfies.length === 0 ? "Front-facing, shoulders visible." :
+    selfies.length < 3 ? `${3 - selfies.length} more slot${3 - selfies.length === 1 ? "" : "s"} available.` :
+    "Delete one to upload another.";
+
   return (
-    <div className="max-w-3xl">
+    <div className="h-full overflow-hidden flex flex-col">
       <PageHeader
         eyebrow="Setup"
-        title="Add your selfies."
+        title="Your Look."
         tutorialKey="onboarding"
-        subtitle="Upload up to 3 selfies. Your primary one is used as the model in try-ons."
+        subtitle="Set your face photo for try-ons and choose a body silhouette."
       />
 
-      {/* Single step: selfie gallery */}
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="surface p-7 mb-5"
-        style={{ borderColor: avatarSelfieUrl ? "var(--border)" : "var(--border-gold)" }}
+      <div
+        className="flex-1 min-h-0 grid gap-5 px-6 pb-6"
+        style={{ gridTemplateColumns: "55fr 45fr" }}
       >
-        <div className="flex items-center gap-3 mb-4">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-            style={{
-              background: avatarSelfieUrl ? "var(--gold)" : "var(--gold-dim)",
-              color: avatarSelfieUrl ? "var(--on-gold)" : "var(--gold)",
-            }}
-          >
-            {avatarSelfieUrl ? <Check size={16} /> : "1"}
-          </div>
-          <h2 className="font-display text-2xl">Your selfies</h2>
-        </div>
+        {/* LEFT: Face photo + Full body */}
+        <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 
-        <div className="flex flex-wrap gap-3 mb-3">
-          {selfies.map((url) => {
-            const isPrimary = url === primaryUrl;
-            return (
-              <div
-                key={url}
-                className="relative surface overflow-hidden group"
+          {/* Face photo */}
+          <section className="surface p-5">
+            <div
+              className="text-xs uppercase tracking-widest mb-3"
+              style={{ color: "var(--ink)", fontWeight: 600 }}
+            >
+              Face photo
+            </div>
+
+            <div className="flex gap-3 mb-2" style={{ flexWrap: "wrap" }}>
+              {selfies.map((url) => {
+                const isPrimary = url === primaryUrl;
+                return (
+                  <div
+                    key={url}
+                    className="relative group overflow-hidden"
+                    style={{
+                      width: 110, height: 135,
+                      border: isPrimary ? "2px solid #513229" : "1.5px solid var(--border)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="Selfie" className="w-full h-full object-cover" />
+
+                    {isPrimary && (
+                      <div
+                        className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] font-semibold flex items-center gap-1"
+                        style={{ background: "#513229", color: "#fff" }}
+                      >
+                        <Star size={9} /> Primary
+                      </div>
+                    )}
+                    {!isPrimary && (
+                      <button
+                        onClick={() => handleSetPrimary(url)}
+                        className="absolute top-1 left-1 px-1.5 py-0.5 text-[10px] opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
+                        style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", cursor: "pointer" }}
+                      >
+                        <Star size={9} /> Set primary
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setPendingDelete(url)}
+                      className="absolute top-1 right-1 p-1 opacity-0 group-hover:opacity-100 transition"
+                      style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--red)", cursor: "pointer" }}
+                      aria-label="Remove"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {selfies.length < 3 && (
+                <label
+                  className="flex flex-col items-center justify-center cursor-pointer"
+                  style={{
+                    width: 110, height: 135, flexShrink: 0,
+                    border: "2px dashed rgba(81,50,41,0.45)",
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {uploading
+                    ? <Loader2 size={20} className="spin" style={{ color: "var(--gold)" }} />
+                    : selfies.length === 0
+                      ? <><Camera size={20} className="mb-1" /><span className="text-xs">Add selfie</span></>
+                      : <><Plus size={20} className="mb-1" /><span className="text-xs">Add another</span></>
+                  }
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+                  />
+                </label>
+              )}
+            </div>
+
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{slotHint}</p>
+          </section>
+
+          {/* Full body */}
+          <section className="surface p-5">
+            <div
+              className="text-xs uppercase tracking-widest mb-3"
+              style={{ color: "var(--ink)", fontWeight: 600 }}
+            >
+              Body silhouette
+            </div>
+
+            <div className="flex gap-3 mb-3">
+              {(["female", "male"] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => { setBodyType(type); setBodyPhotoUrl(null); }}
+                  className="flex flex-col items-center gap-1 px-6 py-3 text-sm font-semibold transition-all"
+                  style={{
+                    background: bodyType === type ? "var(--parchment)" : "var(--surface2)",
+                    border: bodyType === type ? "2px solid #513229" : "1.5px solid var(--border)",
+                    color: "var(--ink)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span style={{ fontSize: 18 }}>{type === "female" ? "♀" : "♂"}</span>
+                  <span>{type === "female" ? "Female" : "Male"}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label
+                className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer"
                 style={{
-                  width: 130, height: 160, padding: 0,
-                  borderColor: isPrimary ? "var(--gold)" : undefined,
+                  border: "1.5px dashed rgba(81,50,41,0.45)",
+                  color: "var(--text-muted)",
+                  display: "inline-flex",
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="Selfie" className="w-full h-full object-cover" />
-                {isPrimary && (
-                  <div
-                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1"
-                    style={{ background: "var(--gold)", color: "var(--on-gold)" }}
-                  >
-                    <Star size={10} /> Primary
-                  </div>
-                )}
-                {!isPrimary && (
+                <Plus size={12} /> or upload your own
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleBodyPhoto(e.target.files[0])}
+                />
+              </label>
+
+              {bodyPhotoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={bodyPhotoUrl}
+                  alt="Body photo"
+                  className="object-cover"
+                  style={{ width: 40, height: 54, border: "1.5px solid var(--border)" }}
+                />
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* RIGHT: Illustrated defaults */}
+        <div className="flex flex-col min-h-0 overflow-y-auto">
+          <section className="surface p-5 flex-1">
+            <div
+              className="text-xs uppercase tracking-widest mb-3"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Or start with a look
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {DICEBEAR_SEEDS.map((seed) => {
+                const isSelected = selectedSeed === seed && selfies.length === 0;
+                return (
                   <button
-                    onClick={() => setPrimary(url)}
-                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", cursor: "pointer" }}
+                    key={seed}
+                    onClick={() => selectDicebear(seed)}
+                    title={seed}
+                    style={{
+                      background: "var(--surface2)",
+                      padding: 0,
+                      border: "none",
+                      cursor: "pointer",
+                      outline: isSelected ? "2px solid #513229" : "2px solid transparent",
+                      outlineOffset: 2,
+                      transition: "outline-color 0.1s",
+                    }}
                   >
-                    <Star size={10} /> Set primary
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://api.dicebear.com/10.x/open-peeps/svg?seed=${seed}`}
+                      alt={seed}
+                      style={{ width: "100%", aspectRatio: "1 / 1", display: "block" }}
+                    />
                   </button>
-                )}
-                <button
-                  onClick={() => setPendingDelete(url)}
-                  className="absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                  style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--red)", cursor: "pointer" }}
-                  aria-label="Remove"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
 
-          {selfies.length < 3 && (
-            <SelfieDropzone onFile={handleUpload} loading={uploading} preview={null} compact />
-          )}
+            <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
+              Upload a selfie for photoreal try-ons. These are illustrated placeholders.
+            </p>
+          </section>
         </div>
-
-        <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {selfies.length === 0 && "Upload your first selfie to get started."}
-          {selfies.length > 0 && selfies.length < 3 && `${3 - selfies.length} more slot${3 - selfies.length === 1 ? "" : "s"} available.`}
-          {selfies.length === 3 && "Maximum reached. Delete one to upload another."}
-        </div>
-
-        {!tipsSeen && (
-          <div className="text-xs mt-3" style={{ color: "var(--text-dim)" }}>
-            <strong>Tips:</strong> Front-facing, shoulders visible, even lighting, plain background, 512×512 min, JPEG/PNG/WebP up to 16MB.
-          </div>
-        )}
-      </motion.section>
-
-      {/* Full-body photo (optional) - powers body-aware styling + a true-to-you avatar */}
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="surface p-7 mb-5"
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-            style={{
-              background: fullBodyUrl ? "var(--gold)" : "var(--surface3)",
-              color: fullBodyUrl ? "var(--on-gold)" : "var(--text-dim)",
-            }}
-          >
-            {fullBodyUrl ? <Check size={16} /> : "2"}
-          </div>
-          <h2 className="font-display text-2xl">Full-body photo <span className="text-sm" style={{ color: "var(--text-muted)" }}>· optional</span></h2>
-        </div>
-        <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-          A clear head-to-toe photo lets Aria style for your real body type &amp; proportions, and makes
-          your Studio avatar look truly like you. Your selfie still drives your face in try-ons.
-        </p>
-        <BodyDropzone onFile={handleUploadFullBody} loading={uploadingFull} preview={fullBodyUrl} />
-      </motion.section>
-
-      {/* Stylist info card - no setup needed, always available */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="surface p-5 mb-5 flex items-start gap-4"
-        style={{ background: "var(--gold-dim)", borderColor: "var(--border-gold)" }}
-      >
-        <Sparkles size={20} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
-        <div className="flex-1 text-sm">
-          <div className="font-display text-lg mb-1" style={{ color: "var(--text)" }}>
-            Your AI stylist is ready
-          </div>
-          <p style={{ color: "var(--text-muted)" }}>
-            Aria, our admin stylist, is always available. No setup needed — go to{" "}
-            <Link href="/stylist" style={{ color: "var(--gold)", textDecoration: "underline" }}>
-              AI Stylist
-            </Link>{" "}
-            to talk or type with her about your wardrobe.
-          </p>
-        </div>
-      </motion.div>
+      </div>
 
       <ConfirmDialog
         open={!!pendingDelete}
@@ -255,72 +332,8 @@ export default function OnboardingPage() {
         description="It'll be removed from your gallery. Try-ons that already used it stay intact."
         confirmLabel="Remove"
         destructive
-        onConfirm={() => { if (pendingDelete) removeSelfie(pendingDelete); }}
+        onConfirm={() => { if (pendingDelete) handleDelete(pendingDelete); }}
       />
     </div>
-  );
-}
-
-function BodyDropzone({
-  onFile, loading, preview,
-}: {
-  onFile: (f: File) => void; loading: boolean; preview: string | null;
-}) {
-  return (
-    <label
-      className="surface flex items-center justify-center cursor-pointer overflow-hidden"
-      style={{ width: 150, height: 220, borderStyle: preview ? "solid" : "dashed" }}
-    >
-      {loading ? (
-        <Loader2 size={26} className="spin" style={{ color: "var(--gold)" }} />
-      ) : preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview} alt="Full-body preview" className="w-full h-full" style={{ objectFit: "contain" }} />
-      ) : (
-        <div className="text-center px-3" style={{ color: "var(--text-dim)" }}>
-          <Camera size={26} className="mx-auto mb-2" />
-          <div className="text-xs">Add a full-body photo</div>
-        </div>
-      )}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-      />
-    </label>
-  );
-}
-
-function SelfieDropzone({
-  onFile, loading, preview, compact = false,
-}: {
-  onFile: (f: File) => void; loading: boolean; preview: string | null; compact?: boolean;
-}) {
-  const w = compact ? 130 : 200;
-  const h = compact ? 160 : 200;
-  return (
-    <label
-      className="surface flex items-center justify-center cursor-pointer overflow-hidden"
-      style={{ width: w, height: h, borderStyle: preview ? "solid" : "dashed" }}
-    >
-      {loading ? (
-        <Loader2 size={compact ? 22 : 28} className="spin" style={{ color: "var(--gold)" }} />
-      ) : preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview} alt="Selfie preview" className="w-full h-full object-cover" />
-      ) : (
-        <div className="text-center" style={{ color: "var(--text-dim)" }}>
-          {compact ? <Plus size={22} className="mx-auto mb-1" /> : <Camera size={28} className="mx-auto mb-2" />}
-          <div className="text-xs">{compact ? "Add another" : "Click to upload selfie"}</div>
-        </div>
-      )}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-      />
-    </label>
   );
 }

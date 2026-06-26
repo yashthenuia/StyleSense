@@ -8,7 +8,7 @@
   color-scheme: light;
 
   /* Backgrounds — warm cream */
-  --bg:        #f7f1ea;
+  --bg:        #F4F2DF;
   --surface:   #f7f1ea;
   --surface2:  #f0e9df;
   --surface3:  #e6dcce;
@@ -24,7 +24,7 @@
   --text-dim:   #b89882;
 
   /* Brand accent — muted parchment */
-  --gold:       #D7D4B1;
+  --gold:       #E7E3BD;
   --gold-light: #E2DEC8;
   --gold-dim:   rgba(215, 212, 177, 0.25);
   --gold-glow:  rgba(215, 212, 177, 0.40);
@@ -45,7 +45,7 @@
   --radius-sm:  8px;
   --radius:     12px;
   --radius-lg:  16px;
-  --radius-btn: 0.75rem;
+  --radius-btn: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -229,3 +229,24 @@ html, body {
 .closet-item { background: none; border: none; padding: 0; cursor: pointer; }
 .closet-cutout { transition: transform 0.18s ease, filter 0.18s ease; }
 .closet-item:hover .closet-cutout { transform: translateY(-7px); }
+
+/* Landing page scroll escape — overrides html/body overflow:hidden for the marketing page */
+.landing-scroll {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+.landing-nav-link {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  transition: color 0.15s;
+  text-decoration: none;
+}
+.landing-nav-link:hover { color: var(--text); }
+
+/* Garment thumbnail background — transparent PNGs float on site bg naturally */
+.garment-bg {
+  background: var(--bg);
+}

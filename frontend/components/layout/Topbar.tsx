@@ -2,29 +2,25 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Copy, Check, Loader2, Sparkles, Users, MessagesSquare, User, Menu, X } from "lucide-react";
+import { LogOut, Copy, Check, Loader2, Sparkles, User, Menu, X } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "@/components/ui/Toast";
 import { useTasks, selectRunningCount } from "@/store/tasks";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
 
 const PRIMARY_NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/wardrobe",  label: "Wardrobe" },
-  { href: "/studio",    label: "Studio" },
-  { href: "/outfits",   label: "Outfits" },
-  { href: "/stylist",   label: "Aria" },
+  { href: "/dashboard", label: "DASHBOARD" },
+  { href: "/wardrobe",  label: "WARDROBE" },
+  { href: "/studio",    label: "STUDIO" },
+  { href: "/outfits",   label: "OUTFITS" },
+  { href: "/stylist",   label: "ARIA" },
 ];
 
 export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
   const { user, profile, signOut } = useAuth();
   const pathname = usePathname();
-  const supabase = getSupabaseBrowser();
   const [open, setOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pendingFriends, setPendingFriends] = useState(0);
-  const [unreadMsgs, setUnreadMsgs] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const runningCount = useTasks(selectRunningCount);
 
@@ -36,35 +32,6 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-
-    async function load() {
-      const [friendsRes, msgsRes] = await Promise.all([
-        supabase.from("friendships").select("id", { count: "exact", head: true })
-          .eq("addressee_id", user!.id).eq("status", "pending"),
-        supabase.from("messages").select("id", { count: "exact", head: true })
-          .eq("recipient_id", user!.id).is("read_at", null),
-      ]);
-      if (!mounted) return;
-      setPendingFriends(friendsRes.count ?? 0);
-      setUnreadMsgs(msgsRes.count ?? 0);
-    }
-    load();
-
-    const channel = supabase
-      .channel(`topbar:${user.id}`)
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${user.id}` },
-        () => setUnreadMsgs((n) => n + 1))
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` },
-        () => setPendingFriends((n) => n + 1))
-      .subscribe();
-
-    return () => { mounted = false; supabase.removeChannel(channel); };
-  }, [user, supabase]);
 
   function copyShareCode() {
     if (!profile?.share_code) return;
@@ -80,11 +47,11 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
     <>
       <header
         className="flex items-center px-4 md:px-8 py-4 relative gap-4 md:gap-6 shrink-0"
-        style={{ borderBottom: "1px solid var(--border)" }}
+        style={{ borderBottom: "2px solid #513229" }}
       >
         {/* LEFT — Brand + tasks */}
         <div id="topbar-brand-group" className="flex items-center gap-2 md:gap-4 min-w-0 cursor-pointer" onClick={onBrandClick}>
-          <Link href="/dashboard" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "clamp(1.2rem, 4vw, 1.6rem)", textDecoration: "none" }}>
+          <Link href="/dashboard" className="font-display tracking-tight" style={{ color: "var(--ink)", fontSize: "clamp(1.2rem, 4vw, 1.6rem)", textDecoration: "none" }}>
             StyleSense
           </Link>
           {runningCount > 0 && (
@@ -116,8 +83,8 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
                 href={href}
                 className={
                   active
-                    ? "bg-[#eae4da] text-[#301c10] border-transparent font-bold rounded-xl px-4 py-2 text-sm transition-all"
-                    : "bg-transparent border-2 border-[#301c10] text-[#301c10] hover:bg-[#301c10]/5 font-normal rounded-xl px-4 py-2 text-sm transition-all"
+                    ? "text-[#301c10] font-bold px-4 py-2 text-sm transition-all tracking-wide"
+                    : "text-[#7a5a4a] font-normal px-4 py-2 text-sm transition-all tracking-wide hover:text-[#301c10]"
                 }
                 style={{ textDecoration: "none" }}
               >
@@ -139,48 +106,6 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
 
-          <Link
-            href="/friends"
-            title="Friends"
-            aria-label="Friends"
-            className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
-            style={{
-              color: pathname?.startsWith("/friends") ? "var(--gold)" : "var(--text-muted)",
-              background: pathname?.startsWith("/friends") ? "var(--gold-dim)" : "transparent",
-            }}
-          >
-            <Users size={18} strokeWidth={1.6} />
-            {pendingFriends > 0 && (
-              <span
-                className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
-                style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
-              >
-                {pendingFriends}
-              </span>
-            )}
-          </Link>
-
-          <Link
-            href="/chat"
-            title="Chat"
-            aria-label="Chat"
-            className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
-            style={{
-              color: pathname?.startsWith("/chat") ? "var(--gold)" : "var(--text-muted)",
-              background: pathname?.startsWith("/chat") ? "var(--gold-dim)" : "transparent",
-            }}
-          >
-            <MessagesSquare size={18} strokeWidth={1.6} />
-            {unreadMsgs > 0 && (
-              <span
-                className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
-                style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
-              >
-                {unreadMsgs}
-              </span>
-            )}
-          </Link>
-
           <div ref={ref} className="relative ml-1 md:ml-2">
             <button
               onClick={() => setOpen((v) => !v)}
@@ -188,15 +113,23 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
               style={{ background: "none", border: "none", color: "var(--text)" }}
             >
               <div
-                className="rounded-full flex items-center justify-center font-semibold text-sm"
+                className="rounded-full flex items-center justify-center font-semibold text-sm overflow-hidden flex-shrink-0"
                 style={{
                   width: 36, height: 36,
-                  background: "var(--gold-dim)",
+                  background: profile?.avatar_selfie_url ? "transparent" : "var(--gold-dim)",
                   color: "var(--gold)",
-                  border: "1px solid var(--border-gold)",
+                  border: "2px solid #513229",
                 }}
               >
-                {initial}
+                {profile?.avatar_selfie_url ? (
+                  <img
+                    src={profile.avatar_selfie_url}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  initial
+                )}
               </div>
             </button>
 
@@ -255,8 +188,8 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
                   onClick={() => setMobileMenuOpen(false)}
                   className={
                     active
-                      ? "block bg-[#eae4da] text-[#301c10] font-bold rounded-xl px-4 py-2.5 text-sm transition-all"
-                      : "block bg-transparent border-2 border-[#301c10] text-[#301c10] font-normal rounded-xl px-4 py-2.5 text-sm transition-all"
+                      ? "block text-[#301c10] font-bold px-4 py-2.5 text-sm transition-all tracking-wide"
+                      : "block text-[#7a5a4a] font-normal px-4 py-2.5 text-sm transition-all tracking-wide hover:text-[#301c10]"
                   }
                   style={{ textDecoration: "none" }}
                 >

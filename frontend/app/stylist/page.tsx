@@ -2,8 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import { Send, Loader2, Sparkles, MessageCircle, Mic, Plus } from "lucide-react";
+import { Send, Loader2, Sparkles, MessageCircle, Mic, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAriaChat } from "@/store/ariaChat";
@@ -135,163 +134,148 @@ export default function StylistPage() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-8">
-          {tab === "chat" ? (
-            <div className="surface flex flex-col" style={{ height: 620 }}>
-              <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
-                <span className="text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                  Chat with Aria
-                </span>
+      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
+        {tab === "chat" ? (
+          <div className="surface flex flex-col" style={{ minHeight: 560 }}>
+            {/* Aria header */}
+            <div className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                   style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)" }}>
+                <Sparkles size={14} style={{ color: "var(--gold)" }} />
+              </div>
+              <div>
+                <div className="font-display text-base leading-none" style={{ color: "var(--text)" }}>Aria</div>
+                <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  AI Stylist · {items.length} items in context
+                </div>
+              </div>
+              <Link href="/wardrobe" className="ml-auto text-xs" style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+                <ChevronRight size={14} />
+              </Link>
+            </div>
+
+            <div ref={scrollRef} className="flex-1 overflow-auto p-5 space-y-3">
+              <AnimatePresence>
+                {messages.map((m, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className="max-w-[82%] px-4 py-3"
+                      style={{
+                        background: m.role === "user" ? "var(--gold-dim)" : "var(--surface2)",
+                        border: m.role === "user" ? "1px solid var(--border-gold)" : "1px solid var(--border)",
+                        color: "var(--text)",
+                        whiteSpace: "pre-wrap",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      <FormattedReply
+                        content={m.content}
+                        itemIds={m.suggestedItemIds || []}
+                        items={items}
+                      />
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="flex gap-1 px-4 py-3"
+                       style={{ background: "var(--surface2)", border: "1px solid var(--border)" }}>
+                    {[0, 0.15, 0.3].map((d, i) => (
+                      <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce inline-block"
+                            style={{ background: "var(--text-dim)", animationDelay: `${d}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Suggestion chips */}
+            <div className="px-4 pt-2 pb-1 flex gap-2 overflow-x-auto" style={{ borderTop: "1px solid var(--border)" }}>
+              {SUGGESTION_PROMPTS.map((p) => (
                 <button
-                  onClick={startNewChat}
-                  className="text-xs flex items-center gap-1"
-                  style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
-                  title="Start a new conversation"
+                  key={p}
+                  onClick={() => send(p)}
+                  disabled={loading}
+                  className="chip whitespace-nowrap flex-shrink-0"
+                  style={{ fontSize: "0.7rem" }}
                 >
-                  <Plus size={12} /> New chat
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-4 pt-2">
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  placeholder="Ask about an event, outfit, or color combo..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && send(input)}
+                  disabled={loading}
+                />
+                <button className="btn-primary" onClick={() => send(input)} disabled={!input.trim() || loading}>
+                  <Send size={14} />
                 </button>
               </div>
-              <div ref={scrollRef} className="flex-1 overflow-auto p-6 space-y-4">
-                <AnimatePresence>
-                  {messages.map((m, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className="max-w-[80%] px-4 py-3 rounded-[12px]"
-                        style={{
-                          background: m.role === "user" ? "var(--gold-dim)" : "var(--surface2)",
-                          border: m.role === "user" ? "1px solid var(--border-gold)" : "1px solid var(--border)",
-                          color: "var(--text)",
-                          whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
-                        }}
-                      >
-                        <FormattedReply
-                          content={m.content}
-                          itemIds={m.suggestedItemIds || []}
-                          items={items}
-                          manifesting={!!m.manifesting}
-                          manifestUrl={m.manifestUrl}
-                          onManifest={selfieUrl ? () => manifestLook(i) : undefined}
-                        />
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {loading && (
-                  <div className="flex justify-start">
-                    <div className="px-4 py-3 rounded-[12px]"
-                         style={{ background: "var(--surface2)", border: "1px solid var(--border)" }}>
-                      <Loader2 size={16} className="spin" style={{ color: "var(--gold)" }} />
-                    </div>
-                  </div>
-                )}
+            </div>
+          </div>
+        ) : (
+          <div className="surface flex flex-col" style={{ minHeight: 560 }}>
+            {/* Aria header (same in voice tab) */}
+            <div className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                   style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)" }}>
+                <Mic size={14} style={{ color: "var(--gold)" }} />
               </div>
-              <div className="p-4" style={{ borderTop: "1px solid var(--border)" }}>
-                <div className="flex gap-2">
-                  <input
-                    className="input"
-                    placeholder="Ask about an event, outfit, or color combo..."
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && send(input)}
-                    disabled={loading}
-                  />
-                  <button className="btn-primary" onClick={() => send(input)} disabled={!input.trim() || loading}>
-                    <Send size={14} />
-                  </button>
-                </div>
+              <div>
+                <div className="font-display text-base leading-none" style={{ color: "var(--text)" }}>Aria — Voice</div>
+                <div className="text-[10px] uppercase tracking-widest mt-0.5" style={{ color: "var(--text-muted)" }}>Live voice session</div>
               </div>
             </div>
-          ) : (
-            <div className="surface flex flex-col" style={{ height: 620 }}>
-              <div className="flex-1 overflow-hidden">
-                <AvatarWidget />
-              </div>
-              {/* Type instead of speaking - auto-switches to text tab + sends */}
-              <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
-                <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
-                  Or type your question
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    className="input"
-                    placeholder="Type and we'll switch to text mode..."
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && input.trim()) {
-                        const text = input;
-                        setTab("chat");
-                        setTimeout(() => send(text), 50);
-                      }
-                    }}
-                  />
-                  <button
-                    className="btn-primary"
-                    onClick={() => {
-                      if (!input.trim()) return;
+
+            <div className="flex-1 overflow-hidden">
+              <AvatarWidget />
+            </div>
+
+            <div className="p-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Or type to switch to chat</div>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  placeholder="Type to switch to chat..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && input.trim()) {
                       const text = input;
                       setTab("chat");
                       setTimeout(() => send(text), 50);
-                    }}
-                    disabled={!input.trim()}
-                  >
-                    <Send size={14} />
-                  </button>
-                </div>
+                    }
+                  }}
+                />
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    if (!input.trim()) return;
+                    const text = input;
+                    setTab("chat");
+                    setTimeout(() => send(text), 50);
+                  }}
+                  disabled={!input.trim()}
+                >
+                  <Send size={14} />
+                </button>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className="col-span-4">
-          <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            Try asking
           </div>
-          <div className="space-y-2 mb-6">
-            {SUGGESTION_PROMPTS.map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  if (tab === "voice") {
-                    setTab("chat");
-                    setTimeout(() => send(p), 50);
-                  } else {
-                    send(p);
-                  }
-                }}
-                disabled={loading}
-                className="surface surface-hover w-full text-left text-sm px-4 py-3"
-                style={{ display: "block" }}
-              >
-                <Sparkles size={12} style={{ display: "inline", marginRight: 8, color: "var(--gold)" }} />
-                {p}
-              </button>
-            ))}
-          </div>
-
-          <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            Wardrobe context
-          </div>
-          <div className="surface p-4 text-sm">
-            <div style={{ color: "var(--text)" }}>
-              <strong>{items.length}</strong> items available
-            </div>
-            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              The stylist sees every item, color, brand and occasion to make picks.
-            </div>
-            <Link href="/wardrobe" className="text-xs mt-2 inline-block" style={{ color: "var(--gold)" }}>
-              Manage wardrobe →
-            </Link>
-          </div>
-        </div>
-      </div>
+        )}
       </div>
     </div>
   );

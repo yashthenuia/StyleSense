@@ -120,7 +120,7 @@ export default function FriendsPage() {
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
       {/* Your share code card */}
       <div
         className="surface p-5 mb-6 flex items-center justify-between"

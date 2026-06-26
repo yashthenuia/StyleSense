@@ -204,33 +204,36 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
     return url
 
 
-def clean_with_rembg(image_bytes: bytes, background: tuple = (255, 255, 255)) -> bytes:
+def clean_with_rembg(image_bytes: bytes) -> bytes:
     """
-    Remove background using rembg, composite onto a solid color (default white).
-    Returns JPEG bytes.
+    Remove background using rembg. Returns transparent PNG bytes (RGBA).
+    The garment floats on whatever background the UI provides.
     """
     from rembg import remove
     session = _get_rembg_session()
 
-    # remove() returns RGBA PNG bytes
-    cutout_png = remove(image_bytes, session=session)
+    cutout_png = remove(image_bytes, session=session)   # already RGBA PNG
     cutout = Image.open(io.BytesIO(cutout_png)).convert("RGBA")
+    cutout = _fit_portrait_3x4_rgba(cutout)
 
-    # Composite onto solid background
-    canvas = Image.new("RGB", cutout.size, background)
-    canvas.paste(cutout, mask=cutout.split()[3])  # alpha as mask
-
-    # Center-crop and pad to a 3:4 portrait so the wardrobe grid looks consistent
-    canvas = _fit_portrait_3x4(canvas, background)
-
-    # Encode as JPEG
     buf = io.BytesIO()
-    canvas.save(buf, format="JPEG", quality=88)
+    cutout.save(buf, format="PNG")
     return buf.getvalue()
 
 
+def _fit_portrait_3x4_rgba(img: Image.Image) -> Image.Image:
+    """Resize + pad to 768x1024 on a fully transparent canvas (RGBA)."""
+    target_w, target_h = 768, 1024
+    img.thumbnail((target_w, target_h), Image.LANCZOS)
+    canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+    x = (target_w - img.width) // 2
+    y = (target_h - img.height) // 2
+    canvas.paste(img, (x, y), mask=img.split()[3])
+    return canvas
+
+
 def _fit_portrait_3x4(img: Image.Image, background: tuple) -> Image.Image:
-    """Resize + pad an image to a clean 768x1024 (3:4 portrait) on the given background."""
+    """Resize + pad to 768x1024 on a solid background. Used by the Runway verify loop."""
     target_w, target_h = 768, 1024
     img.thumbnail((target_w, target_h), Image.LANCZOS)
     canvas = Image.new("RGB", (target_w, target_h), background)
@@ -312,7 +315,7 @@ def clean_garment_bytes(
     item_category: str = "tops",
     item_image_url: str | None = None,
     prefer: Literal["auto", "runway", "rembg", "none"] = "auto",
-) -> tuple[bytes, CleanMethod]:
+) -> tuple[bytes, CleanMethod, str]:
     """
     Run the cleanup pipeline on raw image bytes.
 
@@ -327,34 +330,33 @@ def clean_garment_bytes(
             'rembg'  -> only rembg
             'none'   -> return original unchanged
 
-    Returns: (output_bytes, method_used)
+    Returns: (output_bytes, method_used, content_type)
+        content_type is "image/png" for rembg (transparent), "image/jpeg" for runway/original.
     """
     if prefer == "none":
-        return image_bytes, "skipped"
+        return image_bytes, "skipped", "image/jpeg"
 
     # Try Runway first if a public URL is available
     if prefer in ("auto", "runway") and item_image_url:
         runway_url = clean_with_runway(item_image_url, item_name, item_category)
         if runway_url:
-            # Download the Runway-generated image
             try:
                 import httpx
                 with httpx.Client(timeout=20.0, follow_redirects=True) as c:
                     r = c.get(runway_url)
                     r.raise_for_status()
-                return r.content, "runway"
+                return r.content, "runway", "image/jpeg"
             except Exception as e:
                 logger.warning(f"Could not download Runway result: {e}")
                 # Fall through to rembg
 
     if prefer == "runway":
-        # User asked for Runway only; on fail return original
-        return image_bytes, "original"
+        return image_bytes, "original", "image/jpeg"
 
-    # rembg path
+    # rembg path — produces transparent PNG
     try:
         cleaned = clean_with_rembg(image_bytes)
-        return cleaned, "rembg"
+        return cleaned, "rembg", "image/png"
     except Exception as e:
         logger.error(f"rembg failed: {e}")
-        return image_bytes, "original"
+        return image_bytes, "original", "image/jpeg"

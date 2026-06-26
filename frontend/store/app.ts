@@ -26,6 +26,11 @@ interface AppState {
   videoModel: string;
   setTryonModel: (id: string) => void;
   setVideoModel: (id: string) => void;
+  // Body silhouette preference (frontend-only, used in Studio try-on context)
+  bodyType: "female" | "male" | null;
+  bodyPhotoUrl: string | null;
+  setBodyType: (type: "female" | "male" | null) => void;
+  setBodyPhotoUrl: (url: string | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -41,6 +46,10 @@ export const useAppStore = create<AppState>()(
       videoModel: "veo3.1",
       setTryonModel: (id) => set({ tryonModel: id }),
       setVideoModel: (id) => set({ videoModel: id }),
+      bodyType: null,
+      bodyPhotoUrl: null,
+      setBodyType: (type) => set({ bodyType: type }),
+      setBodyPhotoUrl: (url) => set({ bodyPhotoUrl: url }),
       toggleSelected: (id) =>
         set((s) => ({
           selectedItemIds: s.selectedItemIds.includes(id)

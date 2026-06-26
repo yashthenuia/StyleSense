@@ -11,7 +11,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
       <Topbar onBrandClick={() => setIsSidebarOpen((v) => !v)} />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar isOpen={isSidebarOpen} />
-        <main className="flex-1 min-h-0 overflow-y-auto px-8 pt-6 pb-16">{children}</main>
+        <main className="flex-1 min-h-0 overflow-hidden px-8 pt-6">{children}</main>
       </div>
     </div>
   );

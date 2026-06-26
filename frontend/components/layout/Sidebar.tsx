@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, MessagesSquare, Settings } from "lucide-react";
+import { Users, MessagesSquare, Settings, Bell } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { useTasks } from "@/store/tasks";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -16,6 +17,7 @@ export function Sidebar({ isOpen = true }: SidebarProps) {
   const supabase = getSupabaseBrowser();
   const [pendingFriends, setPendingFriends] = useState(0);
   const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const finishedTaskCount = useTasks((s) => s.tasks.filter((t) => t.status !== "running").length);
 
   useEffect(() => {
     if (!user) return;
@@ -48,8 +50,9 @@ export function Sidebar({ isOpen = true }: SidebarProps) {
   }, [user, supabase]);
 
   const navItems = [
-    { href: "/friends", icon: Users,          label: "Friends", badge: pendingFriends },
-    { href: "/chat",    icon: MessagesSquare, label: "Chat",    badge: unreadMsgs    },
+    { href: "/activity", icon: Bell,           label: "Activity", badge: finishedTaskCount },
+    { href: "/friends",  icon: Users,          label: "Friends",  badge: pendingFriends    },
+    { href: "/chat",     icon: MessagesSquare, label: "Chat",     badge: unreadMsgs        },
   ];
 
   return (

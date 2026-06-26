@@ -11,6 +11,7 @@ export interface Profile {
   username: string | null;
   share_code: string;
   avatar_url: string | null;
+  avatar_selfie_url: string | null;
 }
 
 interface AuthCtx {
@@ -37,7 +38,7 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
   const [loading, setLoading] = useState(false);
 
   const fetchProfile = useCallback(async (uid: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", uid).single();
+    const { data } = await supabase.from("users").select("*").eq("id", uid).single();
     if (data) setProfile(data as Profile);
   }, [supabase]);
 
@@ -71,6 +72,7 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
     setLoading(true);
     await supabase.auth.signOut();
     setLoading(false);
+    router.refresh(); // invalidate RSC cache so root layout re-fetches user=null before navigation
     router.push("/login");
   }, [supabase, router]);
 

@@ -43,7 +43,7 @@ export function PageHeader({ eyebrow, title, subtitle, action, tutorialKey }: Pa
           </p>
         )}
       </div>
-      {action && <div>{action}</div>}
+      {action && <div className="shrink-0 ml-4">{action}</div>}
     </motion.div>
   );
 }

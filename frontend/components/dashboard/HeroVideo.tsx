@@ -123,11 +123,9 @@ export function HeroVideo() {
             className="w-full h-full flex items-center justify-center"
             style={{ background: "var(--surface2)" }}
           >
-            {aria?.image_url ? (
+            {aria?.image_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={aria.image_url} alt={aria.name || "Stylist"} className="h-full object-contain" />
-            ) : (
-              <Loader2 size={28} className="spin" style={{ color: "var(--gold)" }} />
             )}
           </motion.div>
         )}
