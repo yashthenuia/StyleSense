@@ -1,44 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Backgrounds — layered editorial cream surfaces */
+  color-scheme: light;
+
+  /* Backgrounds — warm cream */
   --bg:        #f7f1ea;
-  --surface:   #ffffff;
+  --surface:   #f7f1ea;
   --surface2:  #f0e9df;
   --surface3:  #e6dcce;
 
-  /* Borders */
-  --border:       rgba(42, 34, 26, 0.08);
-  --border-hover: rgba(42, 34, 26, 0.16);
-  --border-gold:  rgba(201, 168, 76, 0.35);
+  /* Borders — warm brown at low opacity */
+  --border:       rgba(81, 50, 41, 0.12);
+  --border-hover: rgba(81, 50, 41, 0.35);
+  --border-gold:  rgba(81, 50, 41, 0.12);
 
   /* Text */
-  --text:       #2a221a;
-  --text-muted: #7a6a55;
-  --text-dim:   #b3a690;
+  --text:       #3d1f14;
+  --text-muted: #7a5a4a;
+  --text-dim:   #b89882;
 
-  /* Brand gold */
-  --gold:       #c9a84c;
-  --gold-light: #e8cc7a;
-  --gold-dim:   rgba(201, 168, 76, 0.14);
-  --gold-glow:  rgba(201, 168, 76, 0.28);
-  --on-gold:    #1a1410;  /* legible text/icon color on top of --gold surfaces */
+  /* Brand accent — muted parchment */
+  --gold:       #D7D4B1;
+  --gold-light: #E2DEC8;
+  --gold-dim:   rgba(215, 212, 177, 0.25);
+  --gold-glow:  rgba(215, 212, 177, 0.40);
+  --on-gold:    #1a1410;  /* dark text on light gold backgrounds */
+
+  /* Refined Minimal Outline palette */
+  --ink:       #513229;   /* exact brand brown */
+  --parchment: #D7D4B1;   /* active chip/tab fill */
 
   /* Accents */
   --purple: #8b6fe8;
   --teal:   #5cb8b2;
   --rose:   #e87f8a;
-  --green:  #5cc18e;
+  --green:  #6b8e5f;
   --red:    #e85c5c;
 
   /* Radii */
-  --radius-sm: 10px;
-  --radius:    16px;
-  --radius-lg: 24px;
+  --radius-sm:  8px;
+  --radius:     12px;
+  --radius-lg:  16px;
+  --radius-btn: 0.75rem;
 }
 
 * { box-sizing: border-box; }
@@ -78,36 +85,14 @@ html, body {
   box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.5);
 }
 
-.btn-primary {
-  background: var(--gold);
-  color: #1a1410;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 1.5rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-family: inherit;
-  font-size: 0.95rem;
-}
-.btn-primary:hover:not(:disabled) {
-  background: var(--gold-light);
-  box-shadow: 0 0 24px var(--gold-glow);
-  transform: translateY(-1px);
-}
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
+.btn-primary,
 .btn-secondary {
-  background: var(--surface2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  border-radius: var(--radius-btn);
   padding: 0.75rem 1.5rem;
-  font-weight: 500;
+  border: 2px solid var(--ink);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
@@ -117,15 +102,17 @@ html, body {
   font-family: inherit;
   font-size: 0.95rem;
 }
+.btn-primary:hover:not(:disabled),
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface3);
-  border-color: var(--border-hover);
+  background: var(--ink);
+  color: var(--parchment);
 }
-.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:disabled,
+.btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .input {
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 0.75rem 1rem;
@@ -134,7 +121,7 @@ html, body {
   width: 100%;
   transition: border-color 0.15s;
 }
-.input:focus { outline: none; border-color: var(--gold); }
+.input:focus { outline: none; border-color: var(--ink); }
 .input::placeholder { color: var(--text-dim); }
 
 .label {
@@ -150,18 +137,24 @@ html, body {
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.85rem;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-btn);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--ink);
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.chip:hover { border-color: var(--border-gold); color: var(--gold); }
-.chip-active { background: var(--gold-dim); border-color: var(--border-gold); color: var(--gold); }
+.chip:hover { background: rgba(48, 28, 16, 0.05); }
+.chip-active {
+  background: var(--parchment);
+  color: var(--ink);
+  border-color: transparent;
+  font-weight: 700;
+}
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }

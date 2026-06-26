@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
@@ -7,6 +8,7 @@ import {
   Sparkles, MapPin, Film, Loader2, Save, ArrowLeftRight, Shirt, AlertCircle, Share2,
   User as UserIcon, RefreshCw, Upload, X,
 } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { GeneratingState } from "@/components/studio/GeneratingState";
 import { ShareToFriendModal } from "@/components/ShareToFriendModal";
@@ -16,7 +18,6 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
-import { useSeenOnce } from "@/lib/useSeenOnce";
 import { TRYON_MODELS, VIDEO_MODELS } from "@/lib/models";
 import type { WardrobeItem } from "@/types";
 
@@ -273,16 +274,15 @@ export default function StudioPage() {
     <div className="h-full flex flex-col">
       <div className="shrink-0">
         <PageHeader
-          eyebrow="The atelier"
+          subtitle="Pick 1 or 2 items from your wardrobe, then generate a try-on on your avatar."
           tutorialKey="studio"
-          subtitle="Mix pieces from your closet, see them on you instantly, then bring them to life."
         />
 
         {!avatarSelfieUrl && (
-          <div className="surface p-5 mb-6 flex items-start gap-3" style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}>
-            <AlertCircle size={18} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
+          <div className="surface p-5 mb-6 flex items-start gap-3" style={{ background: "var(--surface2)" }}>
+            <AlertCircle size={18} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }} />
             <div className="text-sm">
-              <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--gold)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
+              <strong>Avatar not set.</strong> Upload your selfie in <Link href="/onboarding" style={{ color: "var(--text)", textDecoration: "underline" }}>Avatar Setup</Link> to enable try-ons.
             </div>
           </div>
         )}
@@ -291,34 +291,38 @@ export default function StudioPage() {
           <div className="surface p-5 mb-6 flex items-start gap-3">
             <Shirt size={18} style={{ color: "var(--text-dim)", flexShrink: 0, marginTop: 2 }} />
             <div className="text-sm">
-              <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--gold)", textDecoration: "underline" }}>Wardrobe</Link> first.
+              <strong>Empty wardrobe.</strong> Add items in <Link href="/wardrobe" style={{ color: "var(--text)", textDecoration: "underline" }}>Wardrobe</Link> first.
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-3">
-          <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            Your wardrobe
-          </div>
-          <div className="grid grid-cols-2 gap-2 max-h-[600px] overflow-auto pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+      <div className="lg:h-full flex flex-col lg:grid lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-3">
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-2 lg:overflow-y-auto lg:overflow-x-visible lg:max-h-[600px] lg:pr-1 lg:pb-0">
             {items.map((it) => {
               const sel = selectedItemIds.includes(it.id);
               return (
                 <button
                   key={it.id}
                   onClick={() => selectItem(it)}
-                  className="surface overflow-hidden relative"
-                  style={{ padding: 0, cursor: "pointer", borderColor: sel ? "var(--gold)" : "var(--border)" }}
+                  className="surface overflow-hidden relative flex-shrink-0 w-20 h-20 lg:w-auto lg:h-auto lg:flex-shrink"
+                  style={{ padding: 0, cursor: "pointer", background: "#fff", borderColor: sel ? "var(--ink)" : "var(--border)" }}
                   title={it.name}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={it.image_url} alt={it.name} className="w-full aspect-square object-cover" />
+                  <div className="relative w-full aspect-square">
+                    <Image
+                      src={it.image_url}
+                      alt={it.name}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 80px, 120px"
+                    />
+                  </div>
                   {sel && (
                     <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
-                         style={{ background: "var(--gold)", color: "var(--on-gold)" }}>
+                         style={{ background: "var(--ink)", color: "var(--parchment)" }}>
                       {selectedItemIds.indexOf(it.id) + 1}
                     </div>
                   )}
@@ -328,7 +332,7 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <div className="col-span-6">
+        <div className="lg:col-span-6">
           {generating ? (
             <GeneratingState avatarUrl={effectiveSelfieUrl} itemUrls={activeTryOn?.itemImageUrls || []} startedAt={activeTryOn?.startedAt} />
           ) : resultUrl ? (
@@ -337,10 +341,12 @@ export default function StudioPage() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="surface overflow-hidden"
+              style={{
+                backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                backgroundSize: "28px 28px",
+              }}
             >
               {videoUrl ? (
-                // Natural ratio, capped to the viewport height -> whole video visible,
-                // and no forced letterbox (which paints black bars on <video>).
                 <video src={videoUrl} controls autoPlay loop
                   style={{ display: "block", margin: "0 auto", maxHeight: "72vh", maxWidth: "100%" }} />
               ) : showCompare && effectiveSelfieUrl ? (
@@ -358,9 +364,6 @@ export default function StudioPage() {
               )}
             </motion.div>
           ) : (
-            // Compact empty state - prefers the stylized full-body editorial-3D
-            // avatar (auto-generated server-side from the primary selfie). Falls
-            // back to the raw selfie until that finishes.
             <div className="flex justify-center">
               <div className="surface overflow-hidden relative"
                    style={{ width: "100%", maxWidth: 360, aspectRatio: "3/4" }}>
@@ -419,7 +422,7 @@ export default function StudioPage() {
                       <div className="text-sm">Upload a selfie in <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link> to get started</div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -458,7 +461,7 @@ export default function StudioPage() {
           )}
         </div>
 
-        <div className="col-span-3 flex flex-col gap-3">
+        <div className="lg:col-span-3 flex flex-col gap-3 lg:overflow-y-auto">
           {/* FACE picker - shows current selfie + lets user switch */}
           <div className="surface p-5">
             <div className="flex items-center justify-between mb-3">
@@ -468,7 +471,7 @@ export default function StudioPage() {
               <button
                 onClick={() => setShowFacePicker((v) => !v)}
                 className="text-xs flex items-center gap-1"
-                style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
               >
                 <RefreshCw size={11} /> Switch
               </button>
@@ -480,7 +483,7 @@ export default function StudioPage() {
                   src={effectiveSelfieUrl}
                   alt="Active face"
                   className="rounded-full object-cover"
-                  style={{ width: 56, height: 56, border: "2px solid var(--border-gold)" }}
+                  style={{ width: 56, height: 56, border: "2px solid var(--border)" }}
                 />
               ) : (
                 <div className="rounded-full flex items-center justify-center"
@@ -510,7 +513,7 @@ export default function StudioPage() {
                       className="surface overflow-hidden"
                       style={{
                         width: 50, height: 50, padding: 0, cursor: "pointer",
-                        borderColor: url === effectiveSelfieUrl ? "var(--gold)" : undefined,
+                        borderColor: url === effectiveSelfieUrl ? "var(--ink)" : undefined,
                       }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -559,7 +562,7 @@ export default function StudioPage() {
                   style={{ height: 60, borderStyle: "dashed", color: "var(--text-dim)", fontSize: "0.75rem" }}
                 >
                   {uploadingFace ? (
-                    <Loader2 size={16} className="spin" style={{ color: "var(--gold)" }} />
+                    <Loader2 size={16} className="spin" style={{ color: "var(--text-muted)" }} />
                   ) : (
                     <>
                       <Upload size={14} style={{ marginRight: 6 }} />
@@ -604,7 +607,7 @@ export default function StudioPage() {
                   <button
                     className="text-xs mt-3 underline"
                     onClick={() => { setActiveFaceUrl(avatarSelfieUrl); setShowFacePicker(false); }}
-                    style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer" }}
+                    style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer" }}
                   >
                     ← Reset to my primary selfie
                   </button>
@@ -615,16 +618,21 @@ export default function StudioPage() {
 
           <div className="surface p-5">
             <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-              Selected ({selectedItems.length}/6)
+              Selected ({selectedItems.length}/2)
             </div>
             {selectedItems.length === 0 ? (
               <p className="text-xs mb-3" style={{ color: "var(--text-dim)" }}>None yet.</p>
             ) : (
               <div className="space-y-2 mb-3">
                 {selectedItems.map((it) => (
-                  <div key={it.id} className="flex items-center gap-2 text-xs">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={it.image_url} alt={it.name} style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 6 }} />
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-2 text-xs px-2 py-1.5"
+                    style={{ background: "var(--gold-dim)", border: "1px solid var(--border-gold)", borderRadius: 8 }}
+                  >
+                    <div className="relative flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 6, overflow: "hidden" }}>
+                      <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="32px" />
+                    </div>
                     <span className="truncate flex-1">{it.name}</span>
                   </div>
                 ))}
@@ -669,75 +677,82 @@ export default function StudioPage() {
             )}
           </div>
 
-          {resultUrl && !videoUrl && (
-            <>
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Compare</div>
-                <button className="btn-secondary w-full" onClick={() => setShowCompare((v) => !v)} disabled={!avatarSelfieUrl}>
-                  <ArrowLeftRight size={14} /> {showCompare ? "Hide before/after" : "Before / After"}
-                </button>
+          <>
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Compare</div>
+              <button className="btn-secondary w-full" onClick={() => setShowCompare((v) => !v)} disabled={!resultUrl || !avatarSelfieUrl}>
+                <ArrowLeftRight size={14} /> {showCompare ? "Hide before/after" : "Before / After"}
+              </button>
+            </div>
+
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Place in event</div>
+              <input className="input mb-2" placeholder="e.g. beach wedding"
+                     value={eventInput} onChange={(e) => setEventInput(e.target.value)}
+                     disabled={!resultUrl} />
+              <button className="btn-secondary w-full" onClick={() => generateEventScene(eventInput)}
+                      disabled={!resultUrl || !eventInput.trim() || eventLoading}>
+                {eventLoading ? <Loader2 size={14} className="spin" /> : <MapPin size={14} />}
+                {eventLoading ? "Placing..." : "Place in scene"}
+              </button>
+              {(eventLoading || eventUrl) && (
+                <div className="mt-2">
+                  <ProgressBar
+                    status={eventLoading ? "running" : "complete"}
+                    estimatedSeconds={25}
+                    label="Placing in scene"
+                  />
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1 mt-3">
+                {EVENT_PRESETS.map((p) => (
+                  <button key={p} className="chip" onClick={() => { setEventInput(p); generateEventScene(p); }}
+                          disabled={!resultUrl || eventLoading} style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
+                    {p.split(",")[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="surface p-5">
+              <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate your current scene</div>
+              {eventUrl && (
+                <div className="text-[11px] mb-2" style={{ color: "var(--gold)" }}>
+                  Using placed scene: {eventInput || "current scene"}
+                </div>
+              )}
+
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Video model</div>
+              <select className="input mb-1" value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
+                      style={{ fontSize: "0.85rem" }}>
+                {VIDEO_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
+                ))}
+              </select>
+              <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
+                {VIDEO_MODELS.find((m) => m.id === videoModel)?.blurb}
               </div>
 
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Place in event</div>
-                <input className="input mb-2" placeholder="e.g. beach wedding"
-                       value={eventInput} onChange={(e) => setEventInput(e.target.value)} />
-                <button className="btn-secondary w-full" onClick={() => generateEventScene(eventInput)}
-                        disabled={!eventInput.trim() || eventLoading}>
-                  {eventLoading ? <Loader2 size={14} className="spin" /> : <MapPin size={14} />}
-                  {eventLoading ? "Placing..." : "Place in scene"}
-                </button>
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {EVENT_PRESETS.map((p) => (
-                    <button key={p} className="chip" onClick={() => { setEventInput(p); generateEventScene(p); }}
-                            disabled={eventLoading} style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
-                      {p.split(",")[0]}
-                    </button>
-                  ))}
-                </div>
+              <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Motion</div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {MOTION_PRESETS.map((p) => (
+                  <button key={p.label} className={`chip ${motionPrompt === p.prompt ? "chip-active" : ""}`}
+                          onClick={() => setMotionPrompt(p.prompt)} disabled={animating}
+                          style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
+                    {p.label}
+                  </button>
+                ))}
               </div>
+              <input className="input mb-3" placeholder="Describe the motion (optional)"
+                     value={motionPrompt} onChange={(e) => setMotionPrompt(e.target.value)}
+                     style={{ fontSize: "0.8rem" }} disabled={animating} />
 
-              <div className="surface p-5">
-                <div className="text-xs uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Animate your current scene</div>
-                {eventUrl && (
-                  <div className="text-[11px] mb-2" style={{ color: "var(--gold)" }}>
-                    Using placed scene: {eventInput || "current scene"}
-                  </div>
-                )}
+              <button className="btn-primary w-full" onClick={animate} disabled={animating}>
+                {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (6s video)</>}
+              </button>
+            </div>
+          </>
 
-                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Video model</div>
-                <select className="input mb-1" value={videoModel} onChange={(e) => setVideoModel(e.target.value)}
-                        style={{ fontSize: "0.85rem" }}>
-                  {VIDEO_MODELS.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label} — {m.tier}</option>
-                  ))}
-                </select>
-                <div className="text-[10px] mb-3" style={{ color: "var(--text-dim)" }}>
-                  {VIDEO_MODELS.find((m) => m.id === videoModel)?.blurb}
-                </div>
-
-                <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Motion</div>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {MOTION_PRESETS.map((p) => (
-                    <button key={p.label} className={`chip ${motionPrompt === p.prompt ? "chip-active" : ""}`}
-                            onClick={() => setMotionPrompt(p.prompt)} disabled={animating}
-                            style={{ fontSize: "0.7rem", padding: "0.2rem 0.6rem" }}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <input className="input mb-3" placeholder="Describe the motion (optional)"
-                       value={motionPrompt} onChange={(e) => setMotionPrompt(e.target.value)}
-                       style={{ fontSize: "0.8rem" }} disabled={animating} />
-
-                <button className="btn-primary w-full" onClick={animate} disabled={animating}>
-                  {animating ? <><Loader2 size={14} className="spin" /> Rendering (~60s)</> : <><Film size={14} /> Animate (6s video)</>}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Save/Share stays available even after a video is generated */}
           {resultUrl && (
             <div className="surface p-5 space-y-2">
               <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)}>

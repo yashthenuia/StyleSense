@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { Plus, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -58,7 +59,6 @@ export default function WardrobePage() {
     <div className="h-full flex flex-col">
       <div className="shrink-0">
         <PageHeader
-          eyebrow="Your closet"
           tutorialKey="wardrobe"
           subtitle="Add items by photo upload or product URL. Select up to 2 items, then open Studio to try them on."
           action={
@@ -137,7 +137,7 @@ export default function WardrobePage() {
           style={{ transform: "translateX(-50%)", zIndex: 50, boxShadow: "0 12px 40px -12px rgba(0,0,0,0.7)" }}
         >
           <span className="text-sm">
-            <strong style={{ color: "var(--gold)" }}>{selectedItemIds.length}</strong> selected
+            <strong style={{ color: "var(--text)" }}>{selectedItemIds.length}</strong> selected
             {selectedItemIds.length >= 6 && <span style={{ color: "var(--text-muted)" }}> (max)</span>}
           </span>
           <button className="btn-secondary" onClick={clearSelected} style={{ padding: "0.4rem 0.9rem" }}>
@@ -201,7 +201,7 @@ function AddItemModal({
   const [submitting, setSubmitting] = useState(false);
 
   // Multi-item review state
-  const [phase, setPhase] = useState<"form" | "detecting" | "checklist">("form");
+  const [phase, setPhase] = useState<"form" | "detecting" | "adding" | "checklist">("form");
   const [detected, setDetected] = useState<DetectedItem[]>([]);
   const [detectedSourceUrl, setDetectedSourceUrl] = useState<string | null>(null);
 
@@ -273,7 +273,9 @@ function AddItemModal({
         return;
       }
       if (res.detected.length === 1) {
-        // Single-item path: re-upload via existing /upload using detection to fill blanks
+        // Single-item path: re-upload via existing /upload using detection to fill blanks.
+        // Switch the loader copy so it reflects the second call instead of staying on "Analyzing...".
+        setPhase("adding");
         const d = res.detected[0];
         const fd2 = new FormData();
         fd2.append("file", file);
@@ -341,10 +343,20 @@ function AddItemModal({
       >
         {phase === "detecting" && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--gold)" }} />
+            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--text-muted)" }} />
             <h2 className="font-display text-2xl mb-1">Analyzing your photo...</h2>
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               Looking for individual clothing items.
+            </p>
+          </div>
+        )}
+
+        {phase === "adding" && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Loader2 size={32} className="spin mb-4" style={{ color: "var(--gold)" }} />
+            <h2 className="font-display text-2xl mb-1">Adding to your closet...</h2>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Cleaning up the garment and saving it.
             </p>
           </div>
         )}
@@ -513,9 +525,9 @@ function DetectedItemsChecklist({
               onClick={() => update(i, { checked: !r.checked })}
               className="w-6 h-6 rounded flex items-center justify-center mt-1 flex-shrink-0"
               style={{
-                background: r.checked ? "var(--gold)" : "var(--surface2)",
-                border: `1px solid ${r.checked ? "var(--gold)" : "var(--border)"}`,
-                color: r.checked ? "var(--on-gold)" : "var(--text-dim)",
+                background: r.checked ? "var(--ink)" : "var(--surface2)",
+                border: `1px solid ${r.checked ? "var(--ink)" : "var(--border)"}`,
+                color: r.checked ? "var(--parchment)" : "var(--text-dim)",
                 cursor: "pointer",
               }}
               aria-label={r.checked ? "Uncheck" : "Check"}
