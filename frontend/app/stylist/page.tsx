@@ -468,7 +468,7 @@ function ThisOrThat({ items }: { items: WardrobeItem[] }) {
           Which fits your vibe more?
         </p>
 
-        <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+        <div className="relative grid grid-cols-2 gap-4 w-full max-w-sm">
           {[pair.a, pair.b].map((item) => (
             <motion.button
               key={item.id}
@@ -491,11 +491,20 @@ function ThisOrThat({ items }: { items: WardrobeItem[] }) {
               </div>
             </motion.button>
           ))}
-        </div>
-
-        {/* "or" divider between cards */}
-        <div className="absolute pointer-events-none" style={{ top: "calc(50% - 12px)", left: "calc(50% - 16px)" }}>
-          <span className="text-sm font-semibold" style={{ color: "var(--text-dim)" }}>or</span>
+          {/* "or" divider floats between the two cards */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              top: "calc(50% - 14px)",
+              left: "calc(50% - 13px)",
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              padding: "2px 7px",
+              zIndex: 2,
+            }}
+          >
+            <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>or</span>
+          </div>
         </div>
 
         <AnimatePresence>
