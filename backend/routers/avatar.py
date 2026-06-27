@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 def _analyze_body_photo(image_url: str) -> dict:
     import httpx, base64, json, re
-    from services.anthropic_service import client, MODEL
+    from services.anthropic_service import client, MODEL, _require_storage_url
     try:
-        data = httpx.get(image_url, timeout=20, follow_redirects=True).content
+        _require_storage_url(image_url)
+        data = httpx.get(image_url, timeout=20, follow_redirects=False).content
         b64 = base64.standard_b64encode(data).decode()
         ext = image_url.split(".")[-1].split("?")[0].lower()
         media = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"

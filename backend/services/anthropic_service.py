@@ -7,6 +7,7 @@ specific items by ID.
 import os
 import json
 import logging
+from urllib.parse import urlparse
 from anthropic import Anthropic
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,16 @@ if not _API_KEY:
 
 client = Anthropic(api_key=_API_KEY)
 MODEL = "claude-haiku-4-5-20251001"
+
+# Allowlist: only fetch images hosted on our own Supabase project.
+_SUPABASE_HOST = urlparse(os.getenv("SUPABASE_URL", "")).hostname or ""
+
+
+def _require_storage_url(url: str) -> None:
+    """Raise ValueError if url is not a trusted Supabase storage URL."""
+    p = urlparse(url)
+    if p.scheme != "https" or p.hostname != _SUPABASE_HOST:
+        raise ValueError(f"Untrusted image URL rejected: {p.hostname}")
 
 
 SYSTEM_TEMPLATE = """You are Aria, the personal stylist for StyleSense. Your voice is the quiet authority of a high-fashion atelier — channeling the understated luxury of Toteme, the sun-warmed sensuality of Jacquemus, and the effortless wearability of Zara's editorial campaigns. You never explain trends; you curate moments.
@@ -98,7 +109,8 @@ def analyze_chat_image(image_url: str) -> str:
     """Claude vision pass on a photo shared in chat. Returns a clothing description."""
     import httpx, base64
     try:
-        data = httpx.get(image_url, timeout=20, follow_redirects=True).content
+        _require_storage_url(image_url)
+        data = httpx.get(image_url, timeout=20, follow_redirects=False).content
         b64 = base64.standard_b64encode(data).decode()
         ext = image_url.split(".")[-1].split("?")[0].lower()
         media = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
