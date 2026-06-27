@@ -71,10 +71,10 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
   const signOut = useCallback(async () => {
     setLoading(true);
     await supabase.auth.signOut();
-    setLoading(false);
-    router.refresh(); // invalidate RSC cache so root layout re-fetches user=null before navigation
-    router.push("/");
-  }, [supabase, router]);
+    // Hard navigation so the middleware re-evaluates with cleared cookies.
+    // router.push is a client-side SPA nav and doesn't re-run the middleware.
+    window.location.href = "/";
+  }, [supabase]);
 
   return (
     <Ctx.Provider value={{ user, session, profile, loading, refreshProfile, signOut }}>
