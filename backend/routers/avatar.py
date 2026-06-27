@@ -14,6 +14,54 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _analyze_body_photo(image_url: str) -> dict:
+    import httpx, base64, json, re
+    from services.anthropic_service import client, MODEL
+    try:
+        data = httpx.get(image_url, timeout=20, follow_redirects=True).content
+        b64 = base64.standard_b64encode(data).decode()
+        ext = image_url.split(".")[-1].split("?")[0].lower()
+        media = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=256,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
+                    {"type": "text", "text": (
+                        'Analyze this full-body photo. Return JSON only:\n'
+                        '{"height_impression":"tall|average|petite",'
+                        '"body_shape":"hourglass|pear|apple|rectangle|inverted_triangle",'
+                        '"skin_undertone":"warm|cool|neutral",'
+                        '"fit_notes":"one sentence about flattering silhouettes"}'
+                    )},
+                ],
+            }],
+        )
+        m = re.search(r"\{.*\}", resp.content[0].text.strip(), re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except Exception as e:
+        logger.warning(f"Body analysis failed: {e}")
+    return {}
+
+
+@router.post("/upload-body-photo")
+async def upload_body_photo(file: UploadFile = File(...), user = Depends(current_user)):
+    data = await file.read()
+    try:
+        validate_image_bytes(data, file.content_type or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    body_url = supabase_service.upload_to_storage(
+        "selfies", user["id"], data, file.filename or "body.jpg", file.content_type or "image/jpeg"
+    )
+    analysis = _analyze_body_photo(body_url)
+    supabase_service.upsert_user(user["id"], full_body_url=body_url, body_analysis=analysis)
+    return {"full_body_url": body_url, "body_analysis": analysis}
+
+
 async def _bg_refresh_profile(user_id: str, source_url: str):
     """Cheap color/body profile refresh from the best available photo (no avatar/video)."""
     try:

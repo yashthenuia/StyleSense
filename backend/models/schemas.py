@@ -146,6 +146,7 @@ class ChatMessage(BaseModel):
 
 class StylistChatRequest(BaseModel):
     messages: List[ChatMessage]
+    image_url: Optional[str] = None
 
 
 class StylistChatResponse(BaseModel):

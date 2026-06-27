@@ -9,10 +9,15 @@ import asyncio
 import httpx
 from PIL import Image
 
+from pydantic import BaseModel
 from models.schemas import TryOnRequest, MultiItemTryOnRequest, EventSceneRequest, AnimateRequest
 from services import runway_service, supabase_service
 from services.auth_service import current_user
 from graphs import prompt_graph
+
+
+class SaveTryOnRequest(BaseModel):
+    tryon_id: str
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -246,6 +251,14 @@ async def animate(req: AnimateRequest, user = Depends(current_user)):
         supabase_service.update_tryon_video(req.tryon_result_id, result["video_url"], result["task_id"])
 
     return {"video_url": result["video_url"], "task_id": result["task_id"]}
+
+
+@router.post("/save")
+async def save_tryon(req: SaveTryOnRequest, user = Depends(current_user)):
+    row = supabase_service.get_tryon(req.tryon_id)
+    if not row or row["user_id"] != user["id"]:
+        raise HTTPException(404, "Try-on not found.")
+    return supabase_service.mark_tryon_saved(req.tryon_id)
 
 
 @router.get("/recent")

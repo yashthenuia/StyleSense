@@ -94,6 +94,34 @@ def stylist_chat(messages: list, wardrobe_items: list) -> str:
     return "".join(parts).strip()
 
 
+def analyze_chat_image(image_url: str) -> str:
+    """Claude vision pass on a photo shared in chat. Returns a clothing description."""
+    import httpx, base64
+    try:
+        data = httpx.get(image_url, timeout=20, follow_redirects=True).content
+        b64 = base64.standard_b64encode(data).decode()
+        ext = image_url.split(".")[-1].split("?")[0].lower()
+        media = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
+                    {"type": "text", "text": (
+                        "Describe the outfit or clothing items in this photo in 2-3 sentences, "
+                        "focusing on garment types, colors, and style. Be specific and concise."
+                    )},
+                ],
+            }],
+        )
+        return resp.content[0].text.strip()
+    except Exception as e:
+        logger.warning(f"Chat image analysis failed: {e}")
+        return ""
+
+
 def extract_item_ids(reply_text: str) -> list:
     """Pull out [ITEM:<id>] mentions from a stylist reply."""
     import re

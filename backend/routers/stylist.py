@@ -1,8 +1,12 @@
 """Anthropic-powered stylist chat (Aria LangGraph agent)."""
 import asyncio
+import random
+import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 
 from models.schemas import StylistChatRequest, StylistChatResponse
 from services import supabase_service, anthropic_service, color_service
@@ -24,12 +28,24 @@ async def chat(req: StylistChatRequest, user = Depends(current_user)):
         raise HTTPException(400, "Need at least one message.")
 
     wardrobe = supabase_service.get_wardrobe_items(user["id"])
+    messages = [m.model_dump() for m in req.messages]
+
+    if req.image_url:
+        description = await _run_blocking(anthropic_service.analyze_chat_image, req.image_url)
+        if description:
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i]["role"] == "user":
+                    messages[i] = {
+                        "role": "user",
+                        "content": f"[Photo context: {description}]\n\n{messages[i]['content']}",
+                    }
+                    break
 
     try:
         result = await _run_blocking(
             aria_graph.run_aria,
             user_id=user["id"],
-            messages=[m.model_dump() for m in req.messages],
+            messages=messages,
             wardrobe=wardrobe,
         )
     except Exception as e:
@@ -102,3 +118,36 @@ async def auto_suggestions(user = Depends(current_user)):
             continue
 
     return {"suggestions": suggestions[:3]}
+
+
+@router.get("/this-or-that")
+async def this_or_that(user = Depends(current_user)):
+    wardrobe = supabase_service.get_wardrobe_items(user["id"])
+    if len(wardrobe) < 2:
+        raise HTTPException(400, "Need at least 2 wardrobe items for This or That.")
+    pair = random.sample(wardrobe, 2)
+    return {"pair_id": str(uuid.uuid4()), "item_a": pair[0], "item_b": pair[1]}
+
+
+class ThisOrThatChoice(BaseModel):
+    pair_id: str
+    item_a_id: str
+    item_b_id: str
+    chosen_id: str
+
+
+@router.post("/this-or-that")
+async def save_this_or_that(req: ThisOrThatChoice, user = Depends(current_user)):
+    if req.chosen_id not in (req.item_a_id, req.item_b_id):
+        raise HTTPException(400, "chosen_id must be one of the two item IDs.")
+    row = supabase_service.get_user(user["id"]) or {}
+    prefs: list = row.get("style_preferences") or []
+    prefs.append({
+        "pair_id": req.pair_id,
+        "a_id": req.item_a_id,
+        "b_id": req.item_b_id,
+        "chosen_id": req.chosen_id,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    })
+    supabase_service.upsert_user(user["id"], style_preferences=prefs[-100:])
+    return {"saved": True, "total_preferences": len(prefs)}
