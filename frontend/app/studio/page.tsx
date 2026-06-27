@@ -58,6 +58,7 @@ export default function StudioPage() {
   const [motionPrompt, setMotionPrompt] = useState(MOTION_PRESETS[0].prompt);
   const [showShare, setShowShare] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [selfiesLoaded, setSelfiesLoaded] = useState(false);
   const [quality, setQuality] = useState<"standard" | "pro">("pro");
   const [settingInput, setSettingInput] = useState("");
   const [enhancePrompt, setEnhancePrompt] = useState(true);
@@ -140,7 +141,6 @@ export default function StudioPage() {
     apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies")
       .then((d) => {
         setAllSelfies(d.selfie_urls || []);
-        // Honor a "borrowed face" set by clicking "Use this face" on a chat-shared try-on
         const borrowed = typeof window !== "undefined" ? sessionStorage.getItem("studio_borrowed_face") : null;
         if (borrowed) {
           setActiveFaceUrl(borrowed);
@@ -149,8 +149,9 @@ export default function StudioPage() {
         } else {
           setActiveFaceUrl((cur) => cur || d.primary_url || avatarSelfieUrl);
         }
+        setSelfiesLoaded(true);
       })
-      .catch(() => { setActiveFaceUrl(avatarSelfieUrl); });
+      .catch(() => { setActiveFaceUrl(avatarSelfieUrl); setSelfiesLoaded(true); });
   }, [user, avatarSelfieUrl]);
 
   // Fetch + poll stylized full-body avatar (auto-generated server-side on selfie upload).
@@ -279,7 +280,7 @@ export default function StudioPage() {
           tutorialKey="studio"
         />
 
-        {!avatarSelfieUrl && (
+        {selfiesLoaded && !effectiveSelfieUrl && (
           <div className="surface p-5 mb-6 flex items-start gap-3" style={{ background: "var(--surface2)" }}>
             <AlertCircle size={18} style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 2 }} />
             <div className="text-sm">
@@ -635,6 +636,13 @@ export default function StudioPage() {
                       <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="32px" />
                     </div>
                     <span className="truncate flex-1">{it.name}</span>
+                    <button
+                      onClick={() => setSelected(selectedItemIds.filter((x) => x !== it.id))}
+                      aria-label={`Remove ${it.name}`}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", flexShrink: 0, padding: 2, lineHeight: 1 }}
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
                 ))}
               </div>

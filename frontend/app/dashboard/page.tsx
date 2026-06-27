@@ -58,16 +58,17 @@ export default function DashboardPage() {
               >
                 <Link
                   href={`/wardrobe?category=${a.category}`}
-                  className="surface surface-hover block overflow-hidden"
-                  style={{ textDecoration: "none", color: "inherit" }}
+                  className="surface surface-hover block overflow-hidden relative"
+                  style={{ textDecoration: "none", color: "inherit", border: "1px solid var(--ink)" }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={a.preview} alt={a.category} className="w-full aspect-[4/5] object-cover" />
-                  <div className="px-3 py-2">
-                    <div className="text-sm capitalize">{a.category}</div>
-                    <div className="text-xs" style={{ color: "var(--text-dim)" }}>
-                      {a.count} item{a.count === 1 ? "" : "s"}
-                    </div>
+                  <div
+                    className="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center justify-between"
+                    style={{ background: "var(--ink)", color: "var(--bg)" }}
+                  >
+                    <span className="text-xs font-mono capitalize">{a.category}</span>
+                    <span className="text-xs font-mono">{a.count}</span>
                   </div>
                 </Link>
               </motion.div>
@@ -83,8 +84,8 @@ export default function DashboardPage() {
           <Sparkles size={22} style={{ color: "var(--text-dim)" }} />
         </div>
 
-        {/* Aria / user ramp video — 220px compact strip */}
-        <div className="relative overflow-hidden shrink-0" style={{ height: 220 }}>
+        {/* Aria / user ramp video — 16:9 strip */}
+        <div className="shrink-0">
           <HeroVideo />
         </div>
 
@@ -103,19 +104,19 @@ export default function DashboardPage() {
                   key={r.id}
                   href="/studio"
                   className="surface overflow-hidden flex-shrink-0"
-                  style={{ width: 200, padding: 0, textDecoration: "none" }}
+                  style={{ width: 160, padding: 0, textDecoration: "none" }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={r.event_scene_url || r.result_image_url}
                     alt="Try-on"
-                    style={{ width: 200, aspectRatio: "3/4", objectFit: "cover", display: "block" }}
+                    style={{ width: 160, aspectRatio: "3/4", objectFit: "cover", display: "block" }}
                   />
                 </Link>
               ))}
             </div>
           </div>
-        ) : isNewUser ? (
+        ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
             <ActionCard
               href="/wardrobe"
@@ -136,7 +137,7 @@ export default function DashboardPage() {
               desc="What should you wear to your next event? Get specific item picks."
             />
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

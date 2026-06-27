@@ -252,13 +252,15 @@ function AddItemModal({
     }
   }
 
-  // For URL tab: same as before. For Upload tab: detect first, then route to
-  // either single-item upload or the multi-item checklist.
+  // For URL tab: close modal immediately, add in background.
+  // For Upload tab: detect first, then route to single-item or checklist.
   async function submit() {
     if (tab === "url") {
       if (!name.trim()) { toast.error("Name is required."); return; }
-      if (!scrapedImage) { toast.error("Scrape a URL first."); return; }
-      setSubmitting(true);
+      if (!scrapedImage) { toast.error("Fetch a product URL first."); return; }
+      // Close immediately — add in background
+      onClose();
+      toast.success("Adding to wardrobe in the background…");
       try {
         const item = await apiPost<WardrobeItem>("/api/wardrobe/from-url", {
           name,
@@ -269,12 +271,10 @@ function AddItemModal({
           image_url: scrapedImage,
           source_url: url,
         });
-        toast.success("Item added.");
         onAdded(item);
+        toast.success(`"${item.name}" added to wardrobe.`);
       } catch (e) {
-        toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
-      } finally {
-        setSubmitting(false);
+        toast.error(`Could not add item: ${e instanceof Error ? e.message : "unknown"}`);
       }
       return;
     }
@@ -412,26 +412,31 @@ function AddItemModal({
         </div>
 
         {tab === "upload" ? (
-          <label
-            className="surface flex items-center justify-center cursor-pointer overflow-hidden mb-4"
-            style={{ width: "100%", height: 200, borderStyle: file ? "solid" : "dashed" }}
-          >
-            {preview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preview} alt="Preview" className="w-full h-full object-contain" />
-            ) : (
-              <div className="text-center" style={{ color: "var(--text-dim)" }}>
-                <Upload size={28} className="mx-auto mb-2" />
-                <div className="text-xs">Click to upload (JPG, PNG, WebP)</div>
-              </div>
-            )}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            />
-          </label>
+          <>
+            <p className="text-xs mb-3" style={{ color: "var(--text-dim)" }}>
+              Upload a single item on a clean background, a flat lay of multiple items, or a photo of someone wearing an outfit — we&apos;ll detect and isolate each piece.
+            </p>
+            <label
+              className="surface flex items-center justify-center cursor-pointer overflow-hidden mb-4"
+              style={{ width: "100%", height: 180, borderStyle: file ? "solid" : "dashed" }}
+            >
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="Preview" className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-center" style={{ color: "var(--text-dim)" }}>
+                  <Upload size={24} className="mx-auto mb-2" />
+                  <div className="text-xs">JPG · PNG · WebP</div>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
+            </label>
+          </>
         ) : (
           <div className="mb-4">
             <div className="flex gap-2">
@@ -440,18 +445,17 @@ function AddItemModal({
                 placeholder="https://amazon.com/dp/... or any product URL"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && scrape()}
               />
-              <button className="btn-secondary" onClick={scrape} disabled={!url.trim() || scraping}>
-                {scraping ? <Loader2 size={16} className="spin" /> : "Scrape"}
+              <button className="btn-secondary" onClick={scrape} disabled={!url.trim() || scraping} style={{ flexShrink: 0 }}>
+                {scraping ? <Loader2 size={15} className="spin" /> : "Fetch"}
               </button>
             </div>
             {scrapedImage && (
               <div className="surface mt-3 p-3 flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={scrapedImage} alt="Scraped" style={{ width: 80, height: 80, objectFit: "contain" }} />
-                <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  Scraped successfully. Will be re-hosted to Supabase Storage when you save.
-                </div>
+                <img src={scrapedImage} alt="Scraped" style={{ width: 64, height: 64, objectFit: "contain" }} />
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>Product image found — fill in the details below and save.</div>
               </div>
             )}
           </div>

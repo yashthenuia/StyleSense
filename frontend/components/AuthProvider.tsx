@@ -73,7 +73,7 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
     await supabase.auth.signOut();
     setLoading(false);
     router.refresh(); // invalidate RSC cache so root layout re-fetches user=null before navigation
-    router.push("/login");
+    router.push("/");
   }, [supabase, router]);
 
   return (
