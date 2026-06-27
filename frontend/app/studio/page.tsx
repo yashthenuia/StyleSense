@@ -20,7 +20,7 @@ import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { TRYON_MODELS, VIDEO_MODELS } from "@/lib/models";
 import { useSeenOnce } from "@/lib/useSeenOnce";
-import type { WardrobeItem } from "@/types";
+import type { WardrobeItem, TryOnResult } from "@/types";
 
 const MOTION_PRESETS = [
   { label: "Slow turn to camera", prompt: "The subject slowly turns toward the camera with a confident editorial pose, gentle hair movement." },
@@ -72,6 +72,8 @@ export default function StudioPage() {
   const [uploadingFace, setUploadingFace] = useState(false);
   const [refreshingAvatar, setRefreshingAvatar] = useState(false);
   const taskHintSeen = useSeenOnce("studio-task-hint");
+  const [recentTryOns, setRecentTryOns] = useState<TryOnResult[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // On-demand "Refresh my avatar": regenerates the realistic hero still (~5cr) + polls.
   async function refreshAvatar() {
@@ -138,6 +140,7 @@ export default function StudioPage() {
   useEffect(() => {
     if (!user) return;
     apiGet<WardrobeItem[]>(`/api/wardrobe`).then(setItems).catch(() => {});
+    apiGet<TryOnResult[]>("/api/tryon/recent").then(r => setRecentTryOns(r.slice(0, 8))).catch(() => {});
     apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies")
       .then((d) => {
         setAllSelfies(d.selfie_urls || []);
@@ -396,9 +399,6 @@ export default function StudioPage() {
                       >
                         {stylizedAvatarUrl ? "Your avatar" : "Your starting point"}
                       </div>
-                      <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                        Pick items + click Generate
-                      </div>
                       {stylizedAvatarStatus !== "generating" && (
                         <button
                           onClick={refreshAvatar}
@@ -427,6 +427,32 @@ export default function StudioPage() {
                 )}
                 </div>
               </div>
+          )}
+
+          {/* N2 — Previous try-ons strip */}
+          {recentTryOns.length > 0 && !generating && (
+            <div className="surface p-3 mt-3">
+              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
+                Previous try-ons · click to view
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {recentTryOns.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setLightboxUrl(r.event_scene_url || r.result_image_url)}
+                    style={{ padding: 0, background: "none", border: "1px solid var(--border)", cursor: "pointer", flexShrink: 0 }}
+                    title={r.event_context || r.prompt_used || "Past try-on"}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={r.event_scene_url || r.result_image_url}
+                      alt="Past try-on"
+                      style={{ width: 52, height: 52, objectFit: "cover", display: "block" }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {resultUrl && !generating && (activeTryOn?.itemImageUrls?.length ?? 0) > 0 && (
@@ -775,6 +801,35 @@ export default function StudioPage() {
         </div>
       </div>
       </div>
+
+      {/* Lightbox for historical try-ons */}
+      {lightboxUrl && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ background: "rgba(8,8,13,0.92)", zIndex: 200 }}
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightboxUrl}
+              alt="Previous try-on"
+              style={{ maxHeight: "88vh", maxWidth: "90vw", display: "block", objectFit: "contain" }}
+            />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              style={{
+                position: "absolute", top: 8, right: 8,
+                background: "rgba(8,8,13,0.7)", border: "1px solid rgba(255,255,255,0.15)",
+                color: "#fff", padding: "4px 10px", cursor: "pointer", fontSize: "0.8rem",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </motion.div>
+      )}
 
       {showShare && resultId && (
         <ShareToFriendModal
