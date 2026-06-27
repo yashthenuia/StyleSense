@@ -2,7 +2,7 @@
 
 ## universal
 
-1. premium color+font combinations ; concern : if the site already has a fixed topbar and collapsible sidebar to give studio endpoint a studio look ; the whole feel of the Site was actually decided from a single Studio look 
+1. premium color+font combinations ; concern : if the site already has a fixed topbar and collapsible sidebar to give studio endpoint a studio look ; the whole feel of the Site was actually decided from a single Studio look
 2. different kinds of button distinction
 3. rounded edges or sharp edges
 
@@ -40,10 +40,11 @@
 12. I did already add sorting in wardorbe with left column , maybe the add item could be in that column
 13. if the to give studshould i have left column for showing sorting elements , when site already has a fixed topbar and collapsible sidebar
 14. url extracted , doesn't have the desired without bacground
-15. tested urls from :-
-myntra , cider , amazon - WORKS ;
-zara -  https://www.zara.com/in/en/boxy-fit-100-linen-polo-shirt-p02634324.html?v1=545453694&v2=2721412  ; amazon - https://www.amazon.in/Leriya-Fashion-Western-Dresses-Outifits/dp/B0GDM28TT9/ref=lp_1968445031_1_3?psc=1 -  ;Could not scrape: Could not find a product image on the page. Paste the image URL directly instead ;
-
+15. tested urls from Top indian and Global sites :-
+    a. myntra , cider , amazon , unilo- WORKS meaning no error and added to wardobe;doesn't mean that is is cut and displayed the correct manner
+    b. zara - Could not scrape: Could not find a product image on the page. Paste the image URL directly instead ;
+    c. -h & m , coach , meesho , ajio, souled store - Could not scrape: Site returned 403. Some sites (Amazon) block scrapers - right-click the product image, copy address, then paste it directly.
+    gucci - Could not scrape: URL timed out. Try pasting the image URL directly.
 
 ## Studio
 
@@ -53,9 +54,11 @@ zara -  https://www.zara.com/in/en/boxy-fit-100-linen-polo-shirt-p02634324.html?
    Pick items + click Generate" , is it needed even after user knows how to do it ?
 4. what does refresh my avatar do ;when i press it
 5. be able to deselct items from "selected 3/2 " itself
-6. button.surface
+6. button.surface card -
 
 ## Outfits
+1. Fill the white space
+
 
 ## "Aria" Stylist
 
@@ -96,8 +99,27 @@ Wear Log Wardrobe item cards "Mark worn" (✓✓) icon on hover
 16 - Default model poses - for animation  
 7 - instructions for user across site after onboarding
 
-# References
+# References - Create Folders or documents for this
+
+Architecture
 
 Competitors -
 
 Design -
+
+Testing -
+Users
+Photos
+urls -
+
+1.  https://www.zara.com/in/en/boxy-fit-100-linen-polo-shirt-p02634324.html?v1=545453694&v2=2721412 ; amazon - https://www.amazon.in/Leriya-Fashion-Western-Dresses-Outifits/dp/B0GDM28TT9/ref=lp_1968445031_1_3?psc=1
+2.  - https://www.gucci.com/int/en/pr/women/ready-to-wear-for-women/dresses-jumpsuits-for-women/midi-long-dresses-for-women/embroidered-silk-stretch-chiffon-long-dress-p-A002W6ZAPE41000
+3.  - https://www2.hm.com/en_in/productpage.1346168001.html
+4.  - https://www.myntra.com/tops/zyng/zyng-women-peplum-top/36808299/buy
+      https://www.coach.com/products/tabby-shoulder-bag-26/CCX04-B4MPL.html?frp=CCX04+B4MPL
+      https://www.meesho.com/georgette-palazzo-for-women-comfortable-high-waist-fit/p/7sl9to
+5.  - https://www.thesouledstore.com/product/supergirl-super-suit-women-cropped-tops?gte=1
+      https://www.ajio.com/
+      6.shein-plus-plus-size-women-drop-shoulder-typographic-patch-detail-crew-tshirt/p/443340300_coffeebrown
+6.  https://www.thesouledstore.com/product/supergirl-super-suit-women-cropped-tops?gte=1
+    https://www.ajio.com/shein-plus-plus-size-women-d
