@@ -232,7 +232,7 @@ export default function OutfitsPage() {
         description={pendingDelete ? `"${pendingDelete.name}" will be removed. The wardrobe items stay.` : ""}
         confirmLabel={deleting ? "Deleting…" : "Delete outfit"}
         destructive
-        onConfirm={() => pendingDelete && performDelete(pendingDelete)}
+        onConfirm={async () => { if (pendingDelete) await performDelete(pendingDelete); }}
       />
     </div>
   );

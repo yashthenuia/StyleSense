@@ -98,7 +98,7 @@ function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: (
 
 function DialogBox({
   title, description, onClose, children,
-}: BaseProps & { children: React.ReactNode }) {
+}: { title: string; description?: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <motion.div
       initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}

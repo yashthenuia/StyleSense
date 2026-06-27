@@ -129,7 +129,7 @@ export const useTasks = create<State>((set, get) => ({
           enhance_prompt: input.enhancePrompt,
           reference_selfie_urls: input.referenceSelfieUrls,
         })
-      : apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate-multi", {
+      : apiPost<{ result_image_url: string; result_id: string; result_nobg_url?: string }>("/api/tryon/generate-multi", {
           avatar_selfie_url: input.avatarSelfieUrl,
           items: input.items.map((i) => ({ image_url: i.image_url, name: i.name, category: i.category })),
           model, setting,
