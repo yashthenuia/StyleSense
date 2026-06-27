@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Shirt, MessageCircle, Plus } from "lucide-react";
+import { Sparkles, Shirt, MessageCircle, Plus, X } from "lucide-react";
 import type { TryOnResult } from "@/types";
 import { HeroVideo } from "@/components/dashboard/HeroVideo";
+import { TryOnCarousel } from "@/components/dashboard/TryOnCarousel";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet } from "@/lib/api";
 import type { WardrobeItem } from "@/types";
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [recent, setRecent] = useState<TryOnResult[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -49,7 +51,7 @@ export default function DashboardPage() {
           {/* Hero ramp video */}
           <HeroVideo />
 
-          {/* Recent try-ons */}
+          {/* Recent try-ons — auto-advancing carousel */}
           {recent.length > 0 && (
             <div>
               <h3
@@ -58,26 +60,39 @@ export default function DashboardPage() {
               >
                 Recent Try-Ons
               </h3>
-              {/* Mobile: horizontal scroll; desktop: 4-col grid */}
-              <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
-                {recent.map((r) => (
-                  <Link
-                    key={r.id}
-                    href="/studio"
-                    className="surface overflow-hidden flex-shrink-0 md:flex-shrink"
-                    style={{ width: 140, padding: 0, textDecoration: "none" }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={r.event_scene_url || r.result_image_url}
-                      alt="Try-on"
-                      style={{ width: "100%", aspectRatio: "3/4", objectFit: "cover", display: "block" }}
-                    />
-                  </Link>
-                ))}
-              </div>
+              <TryOnCarousel
+                results={recent}
+                aspect="4/5"
+                onOpen={(r) => setLightboxUrl(r.event_scene_url || r.result_image_url)}
+              />
             </div>
           )}
+
+          {/* Lightbox */}
+          <AnimatePresence>
+            {lightboxUrl && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 flex items-center justify-center"
+                style={{ background: "rgba(8,8,13,0.92)", zIndex: 200 }}
+                onClick={() => setLightboxUrl(null)}
+              >
+                <button
+                  onClick={() => setLightboxUrl(null)}
+                  style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", color: "#fff", cursor: "pointer" }}
+                >
+                  <X size={22} />
+                </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={lightboxUrl}
+                  alt="Try-on"
+                  style={{ maxHeight: "88vh", maxWidth: "90vw", objectFit: "contain" }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Shortcut cards — always visible */}
           <div className={`grid gap-3 ${recent.length > 0 ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-3"}`}>

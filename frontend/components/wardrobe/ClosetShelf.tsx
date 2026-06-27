@@ -62,7 +62,7 @@ export function ClosetShelf({
                 className="closet-item group relative shrink-0"
                 style={{
                   scrollSnapAlign: "start",
-                  width: 130,
+                  width: 110,
                   border: selected ? "1px solid var(--ink)" : "1px solid var(--border)",
                   background: "var(--surface)",
                 }}
