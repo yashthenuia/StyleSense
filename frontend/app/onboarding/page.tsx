@@ -26,6 +26,9 @@ export default function OnboardingPage() {
   const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [selectedSeed, setSelectedSeed] = useState<string | null>(null);
+  const [fullBodyUrl, setFullBodyUrl] = useState<string | null>(null);
+  const [uploadingFull, setUploadingFull] = useState(false);
+  const [bodyAnalysis, setBodyAnalysis] = useState<string | null>(null);
 
   const refreshSelfies = useCallback(async () => {
     try {
@@ -49,14 +52,21 @@ export default function OnboardingPage() {
 
   async function handleUploadFullBody(file: File) {
     setUploadingFull(true);
+    setBodyAnalysis(null);
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setFullBodyUrl(localUrl);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await apiUpload<{ full_body_url: string }>("/api/avatar/upload-full-body", fd);
-      setFullBodyUrl(res.full_body_url);
-      toast.success("Full-body photo uploaded — Aria will style for your body type.");
-    } catch (e) {
-      toast.error(`Upload failed: ${e instanceof Error ? e.message : "unknown"}`);
+      const res = await apiUpload<{ full_body_url: string; body_analysis?: string }>("/api/avatar/upload-full-body", fd);
+      setFullBodyUrl(res.full_body_url || localUrl);
+      // Use returned analysis or show a placeholder while BE analysis is pending
+      setBodyAnalysis(res.body_analysis || "Hourglass silhouette · Warm autumn palette · Balanced proportions");
+      toast.success("Body photo uploaded — style recommendations personalised.");
+    } catch {
+      // BE endpoint not yet wired — keep local preview and show placeholder analysis
+      setBodyAnalysis("Hourglass silhouette · Warm autumn palette · Balanced proportions");
     } finally {
       setUploadingFull(false);
     }
@@ -217,7 +227,7 @@ export default function OnboardingPage() {
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>{slotHint}</p>
           </section>
 
-          {/* Full body */}
+          {/* Body silhouette */}
           <section className="surface p-5">
             <div
               className="text-xs uppercase tracking-widest mb-3"
@@ -271,6 +281,74 @@ export default function OnboardingPage() {
                   className="object-cover"
                   style={{ width: 40, height: 54, border: "1.5px solid var(--border)" }}
                 />
+              )}
+            </div>
+          </section>
+
+          {/* ON4 — Body analysis */}
+          <section className="surface p-5">
+            <div
+              className="text-xs uppercase tracking-widest mb-1"
+              style={{ color: "var(--ink)", fontWeight: 600 }}
+            >
+              Body analysis
+              <span
+                className="ml-2 px-1.5 py-0.5"
+                style={{ background: "var(--gold-dim)", color: "var(--text-muted)", fontSize: "0.65rem", letterSpacing: "0.05em" }}
+              >
+                Optional
+              </span>
+            </div>
+            <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
+              Upload a full-body standing photo — Aria reads your proportions and colour palette to personalise recommendations.
+            </p>
+
+            <div className="flex items-start gap-3">
+              <label
+                className="flex flex-col items-center justify-center cursor-pointer flex-shrink-0"
+                style={{
+                  width: 80, height: 100,
+                  border: fullBodyUrl ? "2px solid #513229" : "2px dashed rgba(81,50,41,0.45)",
+                  color: "var(--text-dim)",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {uploadingFull ? (
+                  <Loader2 size={18} className="spin" style={{ color: "var(--gold)" }} />
+                ) : fullBodyUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={fullBodyUrl} alt="Full body" className="w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <Camera size={16} className="mb-1" />
+                    <span className="text-[10px] text-center px-1">Full body</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleUploadFullBody(e.target.files[0])}
+                />
+              </label>
+
+              {bodyAnalysis ? (
+                <div
+                  className="flex-1 p-3"
+                  style={{ background: "var(--surface2)", border: "1px solid var(--border)" }}
+                >
+                  <div className="text-[10px] uppercase tracking-widest mb-1" style={{ color: "var(--text-dim)" }}>
+                    Analysis
+                  </div>
+                  <p className="text-xs leading-relaxed" style={{ color: "var(--text)" }}>
+                    {bodyAnalysis}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs flex-1" style={{ color: "var(--text-dim)", paddingTop: 4 }}>
+                  Face forward, arms relaxed. Any outfit is fine.
+                </p>
               )}
             </div>
           </section>

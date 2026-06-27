@@ -45,6 +45,7 @@ export interface ChatMessage {
   scene?: string | null;      // try-on background for "Manifest this look"
   manifesting?: boolean;      // an inline try-on is generating
   manifestUrl?: string;       // the generated look, shown inline in the bubble
+  photoUrl?: string;          // user-uploaded photo shown in their chat bubble
 }
 
 export interface DetectedItem {

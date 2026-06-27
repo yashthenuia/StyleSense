@@ -85,10 +85,9 @@ html, body {
   box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.5);
 }
 
+/* Shared button base */
 .btn-primary,
 .btn-secondary {
-  background: transparent;
-  color: var(--ink);
   font-weight: 700;
   border-radius: var(--radius-btn);
   padding: 0.75rem 1.5rem;
@@ -102,11 +101,28 @@ html, body {
   font-family: inherit;
   font-size: 0.95rem;
 }
-.btn-primary:hover:not(:disabled),
+
+/* Primary — filled; highest visual weight */
+.btn-primary {
+  background: var(--ink);
+  color: var(--parchment);
+}
+.btn-primary:hover:not(:disabled) {
+  background: #3a2019;
+  border-color: #3a2019;
+  color: var(--parchment);
+}
+
+/* Secondary — outlined; inverts on hover */
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+}
 .btn-secondary:hover:not(:disabled) {
   background: var(--ink);
   color: var(--parchment);
 }
+
 .btn-primary:disabled,
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
