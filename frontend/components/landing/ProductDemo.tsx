@@ -12,7 +12,7 @@ function TopbarMock({ active }: { active: string }) {
   const nav = ["DASHBOARD", "WARDROBE", "STUDIO", "OUTFITS", "ARIA"];
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "0 20px", height: 44, borderBottom: "1px solid var(--border)", gap: 24, background: "#f7f1ea", flexShrink: 0 }}>
-      <span style={{ fontFamily: "EB Garamond, serif", fontSize: 14, color: "var(--ink)", fontWeight: 600, letterSpacing: "0.02em" }}>StyleSense</span>
+      <span style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 14, color: "var(--ink)", fontWeight: 600, letterSpacing: "0.02em" }}>StyleSense</span>
       <div style={{ display: "flex", gap: 16, marginLeft: 8 }}>
         {nav.map((n) => (
           <span key={n} style={{ fontSize: 10, letterSpacing: "0.06em", color: n === active ? "var(--ink)" : "var(--text-muted)", fontWeight: n === active ? 700 : 400, fontFamily: "DM Sans, sans-serif" }}>{n}</span>
@@ -334,7 +334,7 @@ export default function ProductDemo() {
                   <span
                     className="step-title"
                     style={{
-                      fontFamily: "EB Garamond, serif",
+                      fontFamily: "Cormorant Garamond, serif",
                       fontSize: "clamp(18px, 2vw, 26px)",
                       fontWeight: 500,
                       color: i === 0 ? "var(--text)" : "var(--text-muted)",

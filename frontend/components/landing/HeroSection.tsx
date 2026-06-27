@@ -34,7 +34,7 @@ function HeroAppMockup() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Panel header */}
         <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0, background: "var(--surface)" }}>
-          <span style={{ fontFamily: "EB Garamond, serif", fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>My Wardrobe</span>
+          <span style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>My Wardrobe</span>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             {["All", "Tops", "Dresses"].map((cat, i) => (
               <span key={cat} style={{ fontSize: 9, padding: "3px 8px", border: "1px solid var(--border)", fontFamily: "DM Sans, sans-serif", color: i === 0 ? "var(--ink)" : "var(--text-muted)", background: i === 0 ? "rgba(61,31,20,0.06)" : "transparent" }}>{cat}</span>
