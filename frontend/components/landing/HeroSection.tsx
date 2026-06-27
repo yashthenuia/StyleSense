@@ -1,0 +1,337 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import Link from "next/link";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
+// ── Wardrobe UI mockup shown inside the hero browser frame ─────────────────── //
+
+const HERO_ITEMS = [
+  { color: "#8b6fe8", label: "Silk Blouse",    badge: "Try-on ✓" },
+  { color: "#c9a84c", label: "Linen Blazer",   badge: null         },
+  { color: "#3d1f14", label: "Trench Coat",    badge: "Try-on ✓" },
+  { color: "#5cb8b2", label: "Midi Dress",     badge: null         },
+  { color: "#e87f8a", label: "Pleated Skirt",  badge: "Try-on ✓" },
+  { color: "#6b8e5f", label: "Wide-leg Pants", badge: null         },
+  { color: "#b5905a", label: "Suede Loafers",  badge: null         },
+  { color: "#9e7e9e", label: "Cashmere Coat",  badge: "Try-on ✓" },
+];
+
+function HeroAppMockup() {
+  return (
+    <div style={{ display: "flex", height: "100%", background: "var(--bg)", overflow: "hidden" }}>
+      {/* Slim sidebar */}
+      <div style={{ width: 44, background: "#ede9d9", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 12, gap: 18, flexShrink: 0 }}>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} style={{ width: 20, height: 20, borderRadius: 3, background: i === 1 ? "var(--ink)" : "rgba(61,31,20,0.12)" }} />
+        ))}
+      </div>
+
+      {/* Main panel */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {/* Panel header */}
+        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0, background: "var(--surface)" }}>
+          <span style={{ fontFamily: "EB Garamond, serif", fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>My Wardrobe</span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {["All", "Tops", "Dresses"].map((cat, i) => (
+              <span key={cat} style={{ fontSize: 9, padding: "3px 8px", border: "1px solid var(--border)", fontFamily: "DM Sans, sans-serif", color: i === 0 ? "var(--ink)" : "var(--text-muted)", background: i === 0 ? "rgba(61,31,20,0.06)" : "transparent" }}>{cat}</span>
+            ))}
+          </div>
+          <div style={{ background: "var(--ink)", color: "#f7f1ea", fontSize: 9, padding: "4px 10px", fontFamily: "DM Sans, sans-serif", letterSpacing: "0.05em", cursor: "pointer", marginLeft: 4 }}>+ ADD</div>
+        </div>
+
+        {/* Grid */}
+        <div style={{ flex: 1, padding: "12px 14px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, overflowY: "hidden" }}>
+          {HERO_ITEMS.map((item) => (
+            <div key={item.label} style={{ background: `${item.color}10`, border: `1px solid ${item.color}28`, display: "flex", flexDirection: "column", cursor: "pointer", position: "relative" }}>
+              {item.badge && (
+                <div style={{ position: "absolute", top: 5, right: 5, background: "var(--ink)", color: "#f7f1ea", fontSize: 7, padding: "2px 4px", fontFamily: "JetBrains Mono, monospace", zIndex: 1 }}>
+                  {item.badge}
+                </div>
+              )}
+              <div style={{ width: "100%", aspectRatio: "3/4", background: `${item.color}1a`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: "34%", height: "55%", background: item.color, opacity: 0.6, borderRadius: 1 }} />
+              </div>
+              <div style={{ padding: "5px 6px" }}>
+                <div style={{ fontSize: 8, color: "var(--text-muted)", fontFamily: "DM Sans, sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Hero component ─────────────────────────────────────────────────────────── //
+
+export default function HeroSection() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+  const subtextRef = useRef<HTMLParagraphElement>(null);
+  const ctasRef = useRef<HTMLDivElement>(null);
+  const badgeRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const frameWrapRef = useRef<HTMLDivElement>(null);
+
+  const headline = "Wear it before you buy it";
+
+  useEffect(() => {
+    const mm = gsap.matchMedia();
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const ctx = gsap.context(() => {
+        // ── Entrance sequence ──────────────────────────────────────────────── //
+        // Badge
+        gsap.fromTo(badgeRef.current,
+          { opacity: 0, y: 16 },
+          { opacity: 1, y: 0, duration: 0.6, delay: 0.05, ease: "power2.out" }
+        );
+
+        // Headline words stagger up with 3D tilt
+        const words = headlineRef.current?.querySelectorAll(".hero-word");
+        if (words) {
+          gsap.fromTo(words,
+            { opacity: 0, y: 36, rotationX: 18, transformOrigin: "center bottom" },
+            { opacity: 1, y: 0, rotationX: 0, duration: 0.85, stagger: 0.08, ease: "power3.out", delay: 0.2 }
+          );
+        }
+
+        // Subtext + CTAs cascade in after headline
+        gsap.fromTo([subtextRef.current, ctasRef.current],
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.65, stagger: 0.15, ease: "power2.out", delay: 0.9 }
+        );
+
+        // Browser frame rises from below with a 3D perspective tilt
+        gsap.fromTo(frameRef.current,
+          {
+            opacity: 0,
+            y: 140,
+            rotationX: 18,
+            transformPerspective: 1400,
+            transformOrigin: "center top",
+          },
+          {
+            opacity: 1,
+            y: 0,
+            rotationX: 0,
+            duration: 1.45,
+            delay: 1.05,
+            ease: "power4.out",
+          }
+        );
+
+        // ── Scroll parallax: frame drifts up slightly ─────────────────────── //
+        gsap.to(frameRef.current, {
+          y: -70,
+          ease: "none",
+          scrollTrigger: {
+            scroller: ".landing-scroll",
+            trigger: sectionRef.current,
+            start: "top top",
+            end: "bottom top",
+            scrub: true,
+          },
+        });
+      });
+
+      return () => ctx.revert();
+    });
+
+    mm.add("(prefers-reduced-motion: reduce)", () => {
+      // Just show everything
+      gsap.set([badgeRef.current, headlineRef.current, subtextRef.current, ctasRef.current, frameRef.current], { opacity: 1, y: 0 });
+    });
+
+    return () => mm.revert();
+  }, []);
+
+  return (
+    <section
+      ref={sectionRef}
+      style={{
+        minHeight: "100vh",
+        paddingTop: 64,
+        background: "var(--bg)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      {/* ── Centered copy block ── */}
+      <div
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: "80px 32px 60px",
+          textAlign: "center",
+          width: "100%",
+        }}
+      >
+        {/* Eyebrow badge */}
+        <div
+          ref={badgeRef}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            border: "1px solid var(--border)",
+            padding: "5px 14px",
+            marginBottom: 32,
+            opacity: 0,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#e87f8a", display: "inline-block" }} />
+          <span style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+            Runway AI Hackathon 2026
+          </span>
+        </div>
+
+        <h1
+          ref={headlineRef}
+          className="font-display"
+          style={{
+            fontSize: "clamp(52px, 7.5vw, 100px)",
+            lineHeight: 1.0,
+            color: "var(--text)",
+            margin: "0 0 32px",
+            fontWeight: 500,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {headline.split(" ").map((word, i) => (
+            <span key={i} className="hero-word" style={{ display: "inline-block", marginRight: "0.22em", opacity: 0 }}>
+              {word}
+            </span>
+          ))}
+        </h1>
+
+        <p
+          ref={subtextRef}
+          style={{
+            fontSize: "clamp(16px, 1.5vw, 20px)",
+            lineHeight: 1.7,
+            color: "var(--text-muted)",
+            margin: "0 auto 44px",
+            maxWidth: 520,
+            opacity: 0,
+          }}
+        >
+          Upload a selfie. Add clothes from any URL. See yourself in them — in any scene, any world, in seconds.
+        </p>
+
+        <div
+          ref={ctasRef}
+          style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", opacity: 0 }}
+        >
+          <Link
+            href="/signup"
+            className="btn-primary"
+            style={{ fontSize: 14, padding: "14px 36px", letterSpacing: "0.06em" }}
+          >
+            Get started free
+          </Link>
+          <button
+            onClick={() => {
+              const scroller = document.querySelector(".landing-scroll");
+              const target = document.getElementById("product-demo");
+              if (scroller && target) {
+                const top = target.getBoundingClientRect().top + scroller.scrollTop;
+                scroller.scrollTo({ top, behavior: "smooth" });
+              }
+            }}
+            style={{
+              fontSize: 14,
+              padding: "14px 36px",
+              color: "var(--text-muted)",
+              background: "none",
+              border: "1px solid var(--border)",
+              letterSpacing: "0.06em",
+              cursor: "pointer",
+              fontFamily: "DM Sans, sans-serif",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "var(--text)";
+              e.currentTarget.style.borderColor = "var(--border-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--text-muted)";
+              e.currentTarget.style.borderColor = "var(--border)";
+            }}
+          >
+            See how it works ↓
+          </button>
+        </div>
+      </div>
+
+      {/* ── Browser frame mockup ── */}
+      <div
+        ref={frameWrapRef}
+        style={{
+          width: "100%",
+          maxWidth: 1100,
+          padding: "0 24px",
+          flex: 1,
+          display: "flex",
+          alignItems: "flex-start",
+        }}
+      >
+        <div
+          ref={frameRef}
+          style={{
+            width: "100%",
+            borderRadius: "10px 10px 0 0",
+            overflow: "hidden",
+            border: "1px solid rgba(81,50,41,0.16)",
+            borderBottom: "none",
+            boxShadow:
+              "0 -4px 0 0 rgba(61,31,20,0.04) inset, 0 40px 100px -20px rgba(61,31,20,0.22), 0 0 0 1px rgba(81,50,41,0.07)",
+            opacity: 0,
+          }}
+        >
+          {/* Browser chrome */}
+          <div
+            style={{
+              height: 38,
+              background: "#ede9d9",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 14px",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: "flex", gap: 5 }}>
+              {["#ff5f56", "#ffbd2e", "#27c93f"].map((c) => (
+                <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.85 }} />
+              ))}
+            </div>
+            <div style={{ flex: 1, background: "rgba(61,31,20,0.06)", borderRadius: 4, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                app.stylesense.ai/wardrobe
+              </span>
+            </div>
+            {/* Window action icons */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {[...Array(3)].map((_, i) => (
+                <div key={i} style={{ width: 14, height: 14, borderRadius: 2, background: "rgba(61,31,20,0.08)" }} />
+              ))}
+            </div>
+          </div>
+
+          {/* App content — fixed height so it partially bleeds below fold */}
+          <div style={{ height: 380 }}>
+            <HeroAppMockup />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

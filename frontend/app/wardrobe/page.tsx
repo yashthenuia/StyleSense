@@ -75,12 +75,33 @@ export default function WardrobePage() {
           }
         />
 
+        {filterCategory !== "all" && (
+          <nav aria-label="Breadcrumb" className="mb-3">
+            <ol className="flex items-center gap-1 text-xs" style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)" }}>
+              <li>
+                <button
+                  onClick={() => setFilterCategory("all")}
+                  className="hover:underline"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, fontSize: "inherit" }}
+                >
+                  Wardrobe
+                </button>
+              </li>
+              <li aria-hidden="true" style={{ userSelect: "none" }}>/</li>
+              <li aria-current="page" style={{ color: "var(--ink)", fontWeight: 600, textTransform: "capitalize" }}>
+                {filterCategory}
+              </li>
+            </ol>
+          </nav>
+        )}
+
         <div className="flex flex-wrap gap-2 mb-6">
           {CATEGORIES.map((c) => (
             <button
               key={c}
               className={`chip ${filterCategory === c ? "chip-active" : ""}`}
               onClick={() => setFilterCategory(c)}
+              aria-pressed={filterCategory === c}
             >
               {c}
             </button>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Loader2, Sparkles, MessageCircle, Mic, ChevronRight } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAriaChat } from "@/store/ariaChat";
@@ -134,9 +135,9 @@ export default function StylistPage() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
+      <div className="flex-1 min-h-0 flex flex-col">
         {tab === "chat" ? (
-          <div className="surface flex flex-col" style={{ minHeight: 560 }}>
+          <div className="surface flex flex-col flex-1 min-h-0">
             {/* Aria header */}
             <div className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
@@ -154,7 +155,7 @@ export default function StylistPage() {
               </Link>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-auto p-5 space-y-3">
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-3">
               <AnimatePresence>
                 {messages.map((m, i) => (
                   <motion.div
@@ -165,11 +166,18 @@ export default function StylistPage() {
                   >
                     <div
                       className="max-w-[82%] px-4 py-3"
-                      style={{
-                        background: m.role === "user" ? "var(--gold-dim)" : "var(--surface2)",
-                        border: m.role === "user" ? "1px solid var(--border-gold)" : "1px solid var(--border)",
-                        color: "var(--text)",
-                        whiteSpace: "pre-wrap",
+                      style={m.role === "user" ? {
+                        background: "var(--gold-dim)",
+                        border: "1px solid var(--border-gold)",
+                        color: "var(--ink)",
+                        fontSize: "0.9rem",
+                      } : {
+                        background: "var(--surface)",
+                        borderLeft: "3px solid #513229",
+                        borderTop: "1px solid var(--border)",
+                        borderRight: "1px solid var(--border)",
+                        borderBottom: "1px solid var(--border)",
+                        color: "var(--ink)",
                         fontSize: "0.9rem",
                       }}
                     >
@@ -177,6 +185,9 @@ export default function StylistPage() {
                         content={m.content}
                         itemIds={m.suggestedItemIds || []}
                         items={items}
+                        manifesting={m.manifesting}
+                        manifestUrl={m.manifestUrl}
+                        onManifest={m.role === "assistant" && (m.suggestedItemIds?.length ?? 0) > 0 ? () => manifestLook(i) : undefined}
                       />
                     </div>
                   </motion.div>
@@ -227,7 +238,7 @@ export default function StylistPage() {
             </div>
           </div>
         ) : (
-          <div className="surface flex flex-col" style={{ minHeight: 560 }}>
+          <div className="surface flex flex-col flex-1 min-h-0">
             {/* Aria header (same in voice tab) */}
             <div className="flex items-center gap-3 px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
@@ -291,8 +302,10 @@ function FormattedReply({
   manifestUrl?: string;
   onManifest?: () => void;
 }) {
-  // Strip the [ITEM:id] tokens from the displayed text but show them as cards below
-  const stripped = content.replace(/\s*\[ITEM:[a-zA-Z0-9\-]+\]/g, "");
+  // Strip [ITEM:id] tokens (and any surrounding **bold** markers the model wraps them with)
+  const stripped = content
+    .replace(/\*{0,2}\s*\[ITEM:[a-zA-Z0-9\-]+\]\s*\*{0,2}/g, "")
+    .replace(/\*{3,}/g, ""); // clean up any leftover orphaned asterisks
   const referenced = items.filter((it) => itemIds.includes(it.id));
   return (
     <div>
@@ -303,7 +316,7 @@ function FormattedReply({
             ul: ({ children }) => <ul style={{ margin: "0.25rem 0 0.5rem", paddingLeft: "1.1rem", listStyle: "disc" }}>{children}</ul>,
             ol: ({ children }) => <ol style={{ margin: "0.25rem 0 0.5rem", paddingLeft: "1.2rem" }}>{children}</ol>,
             li: ({ children }) => <li style={{ margin: "0.1rem 0" }}>{children}</li>,
-            strong: ({ children }) => <strong style={{ color: "var(--gold)" }}>{children}</strong>,
+            strong: ({ children }) => <strong style={{ color: "#513229", fontWeight: 700 }}>{children}</strong>,
           }}
         >
           {stripped}

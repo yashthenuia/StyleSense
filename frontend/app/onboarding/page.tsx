@@ -131,10 +131,7 @@ export default function OnboardingPage() {
         subtitle="Set your face photo for try-ons and choose a body silhouette."
       />
 
-      <div
-        className="flex-1 min-h-0 grid gap-5 px-6 pb-6"
-        style={{ gridTemplateColumns: "55fr 45fr" }}
-      >
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-5 px-4 sm:px-6 pb-6 overflow-y-auto lg:overflow-hidden">
         {/* LEFT: Face photo + Full body */}
         <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 

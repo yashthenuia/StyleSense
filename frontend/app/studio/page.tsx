@@ -19,6 +19,7 @@ import { useTasks, selectActiveTryOn } from "@/store/tasks";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { TRYON_MODELS, VIDEO_MODELS } from "@/lib/models";
+import { useSeenOnce } from "@/lib/useSeenOnce";
 import type { WardrobeItem } from "@/types";
 
 const MOTION_PRESETS = [
@@ -422,9 +423,9 @@ export default function StudioPage() {
                       <div className="text-sm">Upload a selfie in <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link> to get started</div>
                     </div>
                   </div>
+                )}
                 </div>
               </div>
-            </div>
           )}
 
           {resultUrl && !generating && (activeTryOn?.itemImageUrls?.length ?? 0) > 0 && (

@@ -11,21 +11,6 @@ export default function SettingsPage() {
   const { user, signOut } = useAuth();
   const { tryonModel, videoModel, setTryonModel, setVideoModel } = useAppStore();
 
-  async function handleUploadFullBody(file: File) {
-    setUploadingFull(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await apiUpload<{ full_body_url: string }>("/api/avatar/upload-full-body", fd);
-      setFullBodyUrl(res.full_body_url);
-      toast.success("Full-body photo uploaded — Aria will use it for body-aware styling.");
-    } catch (e) {
-      toast.error(`Upload failed: ${e instanceof Error ? e.message : "unknown"}`);
-    } finally {
-      setUploadingFull(false);
-    }
-  }
-
   return (
     <div className="h-full overflow-y-auto pb-16">
       <div className="max-w-2xl">
@@ -101,9 +86,10 @@ function ModelPicker({
   options: { id: string; label: string; blurb: string }[];
   onChange: (id: string) => void;
 }) {
+  const groupId = `model-picker-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
-    <div>
-      <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "var(--ink)", fontWeight: 600 }}>
+    <div role="group" aria-labelledby={groupId}>
+      <div id={groupId} className="text-xs uppercase tracking-widest mb-2" style={{ color: "var(--ink)", fontWeight: 600 }}>
         {label}
       </div>
       <div className="flex gap-2 flex-wrap">
@@ -111,6 +97,7 @@ function ModelPicker({
           <button
             key={opt.id}
             onClick={() => onChange(opt.id)}
+            aria-pressed={value === opt.id}
             className="text-left px-4 py-2.5 text-sm transition-all"
             style={{
               background: value === opt.id ? "var(--parchment)" : "var(--surface2)",

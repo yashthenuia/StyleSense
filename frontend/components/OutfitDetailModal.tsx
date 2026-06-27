@@ -63,43 +63,46 @@ export function OutfitDetailModal({
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-          className="surface w-full grid grid-cols-1 md:grid-cols-2 gap-0 overflow-hidden"
+          className="surface w-full grid grid-cols-1 md:grid-cols-2 gap-0 relative overflow-y-auto md:overflow-hidden"
           style={{ maxWidth: 980, maxHeight: "90vh" }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* LEFT: large preview */}
-          <div className="relative" style={{ background: "var(--bg)", minHeight: 400 }}>
+          {/* Floating close — always visible regardless of scroll position */}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 p-2"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-dim)", cursor: "pointer" }}
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+
+          {/* LEFT: preview — capped at 45vh on mobile so details are visible below */}
+          <div className="relative" style={{ background: "var(--bg)" }}>
             {outfit.preview_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={outfit.preview_image_url}
                 alt={outfit.name}
-                className="w-full h-full object-contain"
-                style={{ maxHeight: "90vh" }}
+                className="w-full object-contain"
+                style={{ maxHeight: "45vh", display: "block" }}
               />
             ) : (
-              <div className="flex items-center justify-center h-full" style={{ minHeight: 400 }}>
+              <div className="flex items-center justify-center" style={{ minHeight: 200, background: "var(--surface2)" }}>
                 <Layers size={48} style={{ color: "var(--text-dim)" }} />
               </div>
             )}
           </div>
 
           {/* RIGHT: details + items + actions */}
-          <div className="p-7 flex flex-col" style={{ minHeight: 400, maxHeight: "90vh", overflow: "auto" }}>
-            <div className="flex items-start justify-between mb-2">
+          <div className="p-5 md:p-7 flex flex-col md:overflow-y-auto" style={{ maxHeight: "90vh" }}>
+            <div className="flex items-start justify-between mb-2 pr-8">
               <div>
                 <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--gold)" }}>
                   Saved outfit
                 </div>
                 <h2 className="font-display text-3xl">{outfit.name}</h2>
               </div>
-              <button
-                onClick={onClose}
-                style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
             </div>
 
             <div className="flex flex-wrap gap-2 mt-3 mb-5">

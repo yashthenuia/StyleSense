@@ -34,7 +34,7 @@ export default function DashboardPage() {
   ).sort((a, b) => b.count - a.count);
 
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-12 gap-6">
+    <div className="h-full overflow-y-auto md:overflow-visible grid grid-cols-1 md:grid-cols-12 gap-6 pb-4 md:pb-0">
       {/* Left column: wardrobe categories — limited count, fits in screen height */}
       <div className="md:col-span-4 flex flex-col gap-3 min-h-0 overflow-y-auto order-2 md:order-1">
         <h2 className="font-display text-3xl shrink-0">Wardrobe</h2>

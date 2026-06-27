@@ -58,7 +58,7 @@ export function Sidebar({ isOpen = true }: SidebarProps) {
   return (
     <aside
       className={[
-        "flex flex-col items-center py-4 shrink-0 transition-all duration-300 border-r-2",
+        "hidden md:flex flex-col items-center py-4 shrink-0 transition-all duration-300 border-r-2",
         isOpen
           ? "w-16 opacity-100"
           : "w-0 opacity-0 overflow-hidden border-r-0 pointer-events-none",

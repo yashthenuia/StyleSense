@@ -7,10 +7,6 @@ import { Loader2, Mail, Lock, ArrowRight } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { toast, Toaster } from "@/components/ui/Toast";
 
-// Google OAuth is hidden until it's actually enabled in Supabase. Set
-// NEXT_PUBLIC_GOOGLE_ENABLED=true (and configure the provider) to show it.
-const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
-
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -64,30 +60,26 @@ function LoginInner() {
         className="surface w-full max-w-md p-8"
       >
         <div className="mb-7 text-center">
-          <div className="font-display text-4xl mb-1" style={{ color: "var(--gold)" }}>StyleSense</div>
-          <p className="text-xs uppercase tracking-widest" style={{ color: "var(--text-dim)" }}>
+          <div className="font-display text-4xl mb-1" style={{ color: "var(--ink)" }}>StyleSense</div>
+          <p className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
             Sign in to your closet
           </p>
         </div>
 
-        {GOOGLE_ENABLED && (
-          <>
-            <button
-              className="btn-secondary w-full mb-4 flex items-center justify-center gap-2"
-              onClick={googleSignIn}
-              disabled={oauthLoading || loading}
-            >
-              {oauthLoading ? <Loader2 size={16} className="spin" /> : <GoogleIcon />}
-              Continue with Google
-            </button>
+        <button
+          className="btn-secondary w-full mb-4 flex items-center justify-center gap-2"
+          onClick={googleSignIn}
+          disabled={oauthLoading || loading}
+        >
+          {oauthLoading ? <Loader2 size={16} className="spin" /> : <GoogleIcon />}
+          Continue with Google
+        </button>
 
-            <div className="flex items-center gap-3 my-5 text-xs" style={{ color: "var(--text-dim)" }}>
-              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-              OR
-              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-            </div>
-          </>
-        )}
+        <div className="flex items-center gap-3 my-5 text-xs" style={{ color: "var(--text-muted)" }}>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          OR
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
 
         <div className="space-y-3 mb-5">
           <div>
@@ -128,7 +120,7 @@ function LoginInner() {
 
         <div className="text-center mt-5 text-sm" style={{ color: "var(--text-muted)" }}>
           New here?{" "}
-          <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`} style={{ color: "var(--gold)" }}>
+          <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`} style={{ color: "var(--ink)", fontWeight: 600 }}>
             Create an account
           </Link>
         </div>

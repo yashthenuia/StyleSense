@@ -177,21 +177,28 @@ export function Topbar({ onBrandClick }: { onBrandClick?: () => void }) {
 
       {/* Mobile nav menu */}
       {mobileMenuOpen && (
-        <nav className="md:hidden shrink-0 surface border-b" style={{ borderColor: "var(--border)" }}>
-          <div className="px-4 py-2 space-y-1">
-            {PRIMARY_NAV.map(({ href, label }) => {
+        <nav className="md:hidden shrink-0 border-b" style={{ background: "var(--bg)", borderColor: "rgba(81,50,41,0.2)" }}>
+          <div className="px-2 py-2">
+            {[
+              ...PRIMARY_NAV,
+              { href: "/activity", label: "ACTIVITY" },
+              { href: "/friends",  label: "FRIENDS" },
+              { href: "/chat",     label: "CHAT" },
+              { href: "/settings", label: "SETTINGS" },
+            ].map(({ href, label }) => {
               const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
               return (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={
-                    active
-                      ? "block text-[#301c10] font-bold px-4 py-2.5 text-sm transition-all tracking-wide"
-                      : "block text-[#7a5a4a] font-normal px-4 py-2.5 text-sm transition-all tracking-wide hover:text-[#301c10]"
-                  }
-                  style={{ textDecoration: "none" }}
+                  className="block px-4 py-2.5 text-sm tracking-wide transition-colors"
+                  style={{
+                    textDecoration: "none",
+                    fontWeight: active ? 700 : 400,
+                    color: active ? "#301c10" : "#7a5a4a",
+                    background: active ? "var(--parchment)" : "transparent",
+                  }}
                 >
                   {label}
                 </Link>
