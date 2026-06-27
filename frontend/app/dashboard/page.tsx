@@ -1,13 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Shirt, MessageCircle, Plus } from "lucide-react";
 import type { TryOnResult } from "@/types";
 import { HeroVideo } from "@/components/dashboard/HeroVideo";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet } from "@/lib/api";
 import type { WardrobeItem } from "@/types";
+
+interface ArchiveEntry {
+  category: string;
+  count: number;
+  previews: string[];
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -21,16 +27,16 @@ export default function DashboardPage() {
   }, [user]);
 
   const archive = Object.values(
-    items.reduce<Record<string, { category: string; count: number; preview: string }>>((acc, it) => {
+    items.reduce<Record<string, ArchiveEntry>>((acc, it) => {
       const key = it.category;
-      if (!acc[key]) acc[key] = { category: key, count: 0, preview: it.image_url };
+      if (!acc[key]) acc[key] = { category: key, count: 0, previews: [] };
       acc[key].count += 1;
+      if (acc[key].previews.length < 6) acc[key].previews.push(it.image_url);
       return acc;
     }, {})
   ).sort((a, b) => b.count - a.count);
 
   return (
-    // Full-height scroll container on mobile; two-col grid on desktop
     <div className="h-full overflow-y-auto">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pb-6">
 
@@ -43,8 +49,8 @@ export default function DashboardPage() {
           {/* Hero ramp video */}
           <HeroVideo />
 
-          {/* Recent try-ons or action cards */}
-          {recent.length > 0 ? (
+          {/* Recent try-ons */}
+          {recent.length > 0 && (
             <div>
               <h3
                 className="text-xs font-semibold uppercase tracking-widest mb-3"
@@ -71,28 +77,29 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <ActionCard
-                href="/wardrobe"
-                icon={<Plus size={18} />}
-                title="Add to closet"
-                desc="Upload a photo or paste a product URL."
-              />
-              <ActionCard
-                href="/studio"
-                icon={<Sparkles size={18} />}
-                title="Try on an outfit"
-                desc="Compose a look and see it on your avatar."
-              />
-              <ActionCard
-                href="/stylist"
-                icon={<MessageCircle size={18} />}
-                title="Ask your stylist"
-                desc="Get item picks for your next event."
-              />
-            </div>
           )}
+
+          {/* Shortcut cards — always visible */}
+          <div className={`grid gap-3 ${recent.length > 0 ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-3"}`}>
+            <ActionCard
+              href="/wardrobe"
+              icon={<Plus size={18} />}
+              title="Add to closet"
+              desc={recent.length > 0 ? undefined : "Upload a photo or paste a product URL."}
+            />
+            <ActionCard
+              href="/studio"
+              icon={<Sparkles size={18} />}
+              title="Try on an outfit"
+              desc={recent.length > 0 ? undefined : "Compose a look and see it on your avatar."}
+            />
+            <ActionCard
+              href="/stylist"
+              icon={<MessageCircle size={18} />}
+              title="Ask your stylist"
+              desc={recent.length > 0 ? undefined : "Get item picks for your next event."}
+            />
+          </div>
         </div>
 
         {/* ── Left column: wardrobe categories (shows second on mobile) ── */}
@@ -110,28 +117,7 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {archive.map((a, i) => (
-                <motion.div
-                  key={a.category}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.04 * i }}
-                >
-                  <Link
-                    href={`/wardrobe?category=${a.category}`}
-                    className="surface surface-hover block overflow-hidden relative"
-                    style={{ textDecoration: "none", color: "inherit", border: "1px solid var(--ink)" }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.preview} alt={a.category} className="w-full aspect-[4/5] object-cover" />
-                    <div
-                      className="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center justify-between"
-                      style={{ background: "var(--ink)", color: "var(--bg)" }}
-                    >
-                      <span className="text-xs font-mono capitalize">{a.category}</span>
-                      <span className="text-xs font-mono">{a.count}</span>
-                    </div>
-                  </Link>
-                </motion.div>
+                <CategoryCard key={a.category} entry={a} index={i} />
               ))}
             </div>
           )}
@@ -142,17 +128,99 @@ export default function DashboardPage() {
   );
 }
 
-function ActionCard({ href, icon, title, desc }: { href: string; icon: React.ReactNode; title: string; desc: string }) {
+function CategoryCard({ entry, index }: { entry: ArchiveEntry; index: number }) {
+  const [imgIdx, setImgIdx] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (entry.previews.length <= 1) return;
+    // Stagger start so cards don't all flip simultaneously
+    const delay = setTimeout(() => {
+      intervalRef.current = setInterval(() => {
+        setImgIdx(i => (i + 1) % entry.previews.length);
+      }, 2400);
+    }, index * 600);
+    return () => {
+      clearTimeout(delay);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [entry.previews.length, index]);
+
   return (
-    <Link href={href} className="surface surface-hover px-5 py-4 block" style={{ textDecoration: "none", color: "inherit" }}>
-      <div
-        className="w-9 h-9 flex items-center justify-center mb-3"
-        style={{ background: "var(--surface2)", color: "var(--ink)", border: "1px solid var(--border)" }}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.04 * index }}
+    >
+      <Link
+        href={`/wardrobe?category=${entry.category}`}
+        className="surface surface-hover block overflow-hidden relative"
+        style={{ textDecoration: "none", color: "inherit", border: "1px solid var(--ink)" }}
       >
-        {icon}
+        <AnimatePresence mode="wait">
+          <motion.img
+            key={imgIdx}
+            src={entry.previews[imgIdx]}
+            alt={entry.category}
+            className="w-full aspect-[4/5] object-cover"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            // eslint-disable-next-line @next/next/no-img-element
+          />
+        </AnimatePresence>
+        <div
+          className="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center justify-between"
+          style={{ background: "var(--ink)", color: "var(--bg)" }}
+        >
+          <span className="text-xs font-mono capitalize">{entry.category}</span>
+          <span className="text-xs font-mono">{entry.count}</span>
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+function ActionCard({
+  href,
+  icon,
+  title,
+  desc,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  desc?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="surface surface-hover block"
+      style={{
+        textDecoration: "none",
+        color: "inherit",
+        padding: desc ? "20px" : "12px 16px",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: desc ? 36 : 28,
+            height: desc ? 36 : 28,
+            background: "var(--surface2)",
+            color: "var(--ink)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className={`font-display leading-tight ${desc ? "text-xl" : "text-base"}`}>{title}</div>
+          {desc && <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>{desc}</p>}
+        </div>
       </div>
-      <div className="font-display text-xl mb-1">{title}</div>
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>{desc}</p>
     </Link>
   );
 }

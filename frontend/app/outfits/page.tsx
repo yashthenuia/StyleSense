@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Layers, Calendar, Share2, Eye, Trash2 } from "lucide-react";
+import { Layers, Calendar, Share2, Eye, Trash2, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiDelete } from "@/lib/api";
 import { ShareToFriendModal } from "@/components/ShareToFriendModal";
@@ -59,7 +60,26 @@ export default function OutfitsPage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col gap-4">
+      <div className="flex items-end justify-between flex-shrink-0">
+        <div>
+          <div
+            className="text-xs mb-2"
+            style={{ color: "var(--gold)", letterSpacing: "0.18em", textTransform: "uppercase" }}
+          >
+            Outfits
+          </div>
+          <h1 className="font-display text-5xl leading-tight">Saved Looks</h1>
+        </div>
+        <Link
+          href="/studio"
+          className="surface surface-hover px-4 py-2 text-sm flex items-center gap-2"
+          style={{ textDecoration: "none", color: "inherit", flexShrink: 0, marginLeft: 16 }}
+        >
+          <Sparkles size={14} style={{ color: "var(--gold)" }} />
+          New look
+        </Link>
+      </div>
       {loading ? (
         <div className="flex gap-3 overflow-x-auto pb-2 flex-1 min-h-0">
           {Array.from({ length: 5 }).map((_, i) => (
