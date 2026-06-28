@@ -160,6 +160,20 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
         logger.warning(f"Runway service unavailable: {e}")
         return None
 
+    # gen4 rejects reference images whose width/height ratio is outside [0.5, 2.0]
+    # (tall phone photos). Pad the reference into range, else the isolate/clean 400s
+    # and every multi-item add fails. Best-effort - fall back to the original on error.
+    try:
+        from services import image_service, supabase_service
+        with httpx.Client(timeout=20.0, follow_redirects=True) as _c:
+            _data = _c.get(ref_uri).content
+        _padded = image_service.pad_to_ratio_range(_data)
+        if _padded != _data:
+            ref_uri = supabase_service.upload_to_storage(
+                "wardrobe", "padded-refs", _padded, "ref.jpg", "image/jpeg")
+    except Exception as e:
+        logger.warning(f"ref-ratio normalize failed for '{item_label}': {e}")
+
     def _gen(p: str) -> str:
         task = client.text_to_image.create(
             model=model,
@@ -186,7 +200,8 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
         with httpx.Client(timeout=20.0, follow_redirects=True) as c:
             r = c.get(url)
             r.raise_for_status()
-        clean, problems = verify_clean_garment(r.content)
+        ctype = r.headers.get("content-type", "image/png").split(";")[0].strip()
+        clean, problems = verify_clean_garment(r.content, content_type=ctype)
         if not clean:
             logger.info(f"'{item_label}': verify failed ({problems}); retrying once")
             retry_prompt = prompt + (

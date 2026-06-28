@@ -35,18 +35,29 @@ SYSTEM_TEMPLATE = """You are StyleAI's personal stylist for the user. You can se
 
 
 def _format_wardrobe(items: list) -> str:
+    """Group the FULL wardrobe by category so the model can build an outfit slot by
+    slot (one top + one bottom, or a dress, + outerwear/shoes/accessory). Every item
+    keeps its exact name + ID for [ITEM:<id>] tagging."""
     if not items:
         return "(empty - user has no wardrobe items yet)"
-    lines = []
+    from collections import defaultdict
+    groups: dict = defaultdict(list)
     for it in items:
-        tags = ", ".join(it.get("tags") or [])
-        line = f"- ID:{it['id']} | {it['name']} | {it.get('category')} | {it.get('color') or '?'} | {it.get('occasion') or 'any'}"
-        if tags:
-            line += f" | tags: {tags}"
-        if it.get("brand"):
-            line += f" | brand: {it['brand']}"
-        lines.append(line)
-    return "\n".join(lines)
+        groups[(it.get("category") or "other").lower()].append(it)
+    order = ["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"]
+    cats = [c for c in order if c in groups] + [c for c in groups if c not in order]
+    out: list = []
+    for c in cats:
+        out.append(f"{c.upper()} ({len(groups[c])}):")
+        for it in groups[c]:
+            tags = ", ".join(it.get("tags") or [])
+            extra = f", tags: {tags}" if tags else ""
+            brand = f", {it['brand']}" if it.get("brand") else ""
+            out.append(
+                f"  - {it['name']} (color: {it.get('color') or '?'}, occasion: "
+                f"{it.get('occasion') or 'any'}{brand}{extra})  ID:{it['id']}"
+            )
+    return "\n".join(out)
 
 
 def stylist_chat(messages: list, wardrobe_items: list) -> str:

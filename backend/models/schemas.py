@@ -88,6 +88,10 @@ class DetectItemsResponse(BaseModel):
     detected: List[DetectedItem]
 
 
+class DetectFromUrlRequest(BaseModel):
+    image_url: str
+
+
 class AddMultiRequest(BaseModel):
     source_image_url: str
     items: List[DetectedItem]

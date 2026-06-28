@@ -45,6 +45,8 @@ export interface ChatMessage {
   scene?: string | null;      // try-on background for "Manifest this look"
   manifesting?: boolean;      // an inline try-on is generating
   manifestUrl?: string;       // the generated look, shown inline in the bubble
+  manifestId?: string;        // the try-on result id (to save it as an outfit)
+  savedOutfit?: boolean;      // this manifested look was saved to Outfits
 }
 
 export interface DetectedItem {

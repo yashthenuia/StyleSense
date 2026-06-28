@@ -68,6 +68,8 @@ export default function StudioPage() {
   const [customFaceUrl, setCustomFaceUrl] = useState("");
   const [uploadingFace, setUploadingFace] = useState(false);
   const [refreshingAvatar, setRefreshingAvatar] = useState(false);
+  // null = still loading; false = the user has uploaded no photo at all.
+  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
   const taskHintSeen = useSeenOnce("studio-task-hint");
 
   // On-demand "Refresh my avatar": regenerates the realistic hero still (~5cr) + polls.
@@ -135,20 +137,26 @@ export default function StudioPage() {
   useEffect(() => {
     if (!user) return;
     apiGet<WardrobeItem[]>(`/api/wardrobe`).then(setItems).catch(() => {});
-    apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies")
-      .then((d) => {
-        setAllSelfies(d.selfie_urls || []);
-        // Honor a "borrowed face" set by clicking "Use this face" on a chat-shared try-on
-        const borrowed = typeof window !== "undefined" ? sessionStorage.getItem("studio_borrowed_face") : null;
-        if (borrowed) {
-          setActiveFaceUrl(borrowed);
-          sessionStorage.removeItem("studio_borrowed_face");
-          toast.success("Using a borrowed face for this session");
-        } else {
-          setActiveFaceUrl((cur) => cur || d.primary_url || avatarSelfieUrl);
-        }
-      })
-      .catch(() => { setActiveFaceUrl(avatarSelfieUrl); });
+    Promise.all([
+      apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies").catch(() => null),
+      apiGet<{ full_body_url: string | null }>("/api/avatar/full-body").catch(() => null),
+    ]).then(([d, b]) => {
+      const selfies = d?.selfie_urls || [];
+      const photoExists = !!(d?.primary_url || selfies.length || b?.full_body_url);
+      setHasPhoto(photoExists);
+      setAllSelfies(selfies);
+      const borrowed = typeof window !== "undefined" ? sessionStorage.getItem("studio_borrowed_face") : null;
+      if (borrowed) {
+        setActiveFaceUrl(borrowed);
+        sessionStorage.removeItem("studio_borrowed_face");
+        toast.success("Using a borrowed face for this session");
+      } else if (photoExists) {
+        setActiveFaceUrl((cur) => cur || d?.primary_url || selfies[0] || b?.full_body_url || avatarSelfieUrl);
+      } else {
+        // No photo on file -> don't fall back to a cached/other avatar.
+        setActiveFaceUrl(null);
+      }
+    });
   }, [user, avatarSelfieUrl]);
 
   // Fetch + poll stylized full-body avatar (auto-generated server-side on selfie upload).
@@ -364,7 +372,7 @@ export default function StudioPage() {
             <div className="flex justify-center">
               <div className="surface overflow-hidden relative"
                    style={{ width: "100%", maxWidth: 360, aspectRatio: "3/4" }}>
-                {(stylizedAvatarUrl || effectiveSelfieUrl) ? (
+                {hasPhoto !== false && (stylizedAvatarUrl || effectiveSelfieUrl) ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -416,7 +424,12 @@ export default function StudioPage() {
                   <div className="flex items-center justify-center h-full text-center px-4" style={{ color: "var(--text-dim)" }}>
                     <div>
                       <UserIcon size={28} className="mx-auto mb-2" />
-                      <div className="text-sm">Upload a selfie in <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link> to get started</div>
+                      <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Set up your avatar</div>
+                      <div className="text-xs mt-1">
+                        Add a selfie (and optionally a full-body photo) in{" "}
+                        <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link>{" "}
+                        to use the Studio and Aria&apos;s manifest.
+                      </div>
                     </div>
                   </div>
                 )}

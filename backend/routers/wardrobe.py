@@ -19,6 +19,7 @@ from models.schemas import (
     ExtractFromImage,
     DetectedItem,
     DetectItemsResponse,
+    DetectFromUrlRequest,
     AddMultiRequest,
     AddMultiResponse,
     AddMultiFailure,
@@ -128,7 +129,7 @@ async def upload_item(
         occasion=occasion,
         color=color,
         brand=brand,
-        cutout_url=_generate_cutout(user["id"], final_url, category=category),
+        cutout_url=None,  # cutouts disabled - the closet grid uses the clean image_url
     )
     item["clean_method"] = method_used
     item["original_url"] = original_url if final_url != original_url else None
@@ -190,7 +191,7 @@ async def add_from_url(req: AddWardrobeFromUrl, user = Depends(current_user)):
         brand=req.brand,
         source_url=req.source_url or req.image_url,
         tags=req.tags,
-        cutout_url=_generate_cutout(user["id"], final_url, category=req.category),
+        cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
     )
     item["clean_method"] = method_used
     item["original_url"] = original_url if final_url != original_url else None
@@ -236,7 +237,7 @@ async def extract_from_image(req: ExtractFromImage, user = Depends(current_user)
         occasion=req.occasion or "casual",
         source_url=req.image_url,
         tags=["extracted-from-friend"],
-        cutout_url=_generate_cutout(user["id"], permanent_url, category=req.category, image_bytes=r.content),
+        cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
     )
     item["clean_method"] = "runway-extract"
     return item
@@ -275,6 +276,35 @@ async def detect_items(
         content, file.content_type or "image/jpeg"
     )
     detected = [DetectedItem(**d) for d in detected_raw]
+    return DetectItemsResponse(image_url=image_url, detected=detected)
+
+
+@router.post("/detect-items-url", response_model=DetectItemsResponse)
+async def detect_items_url(req: DetectFromUrlRequest, user = Depends(current_user)):
+    """Same as /detect-items but from an image URL (pasted product/image link).
+    Re-hosts the image, detects garments, and returns the rehosted URL + detections.
+    The frontend then routes through the same review checklist + /add-multi (which
+    isolates each garment on a clean background)."""
+    try:
+        r = httpx.get(req.image_url, timeout=20.0, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 StyleSense/1.0"})
+        r.raise_for_status()
+        content = r.content
+        ctype = r.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if ctype not in ("image/jpeg", "image/png", "image/webp"):
+            ctype = "image/jpeg"
+    except Exception as e:
+        raise HTTPException(400, f"Could not download image from URL: {e}")
+
+    try:
+        image_url = supabase_service.upload_to_storage(
+            bucket="wardrobe", user_id=user["id"], file_bytes=content,
+            filename="from-url.jpg", content_type=ctype,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+
+    detected = [DetectedItem(**d) for d in wardrobe_vision_service.detect_items_from_bytes(content, ctype)]
     return DetectItemsResponse(image_url=image_url, detected=detected)
 
 
@@ -326,9 +356,6 @@ async def add_multi(req: AddMultiRequest, user = Depends(current_user)):
         except Exception as e:
             return None, AddMultiFailure(name=item.name, reason=f"Storage rehost failed: {e}")
 
-        cutout = await loop.run_in_executor(
-            None, _generate_cutout, user["id"], permanent_url, item.category, r.content
-        )
         try:
             row = supabase_service.insert_wardrobe_item(
                 user_id=user["id"],
@@ -340,7 +367,7 @@ async def add_multi(req: AddMultiRequest, user = Depends(current_user)):
                 brand=item.brand,
                 source_url=req.source_image_url,
                 tags=["multi-item-detected"],
-                cutout_url=cutout,
+                cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
             )
             return row, None
         except Exception as e:

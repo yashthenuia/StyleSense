@@ -27,7 +27,7 @@ async def _bg_refresh_profile(user_id: str, source_url: str):
         logger.warning(f"Profile refresh failed for {user_id}: {e}")
 
 
-async def _bg_generate_stylized(user_id: str, selfie_url: str, still_only: bool = True):
+async def _bg_generate_stylized(user_id: str, selfie_url: str, still_only: bool = True, model: str = "gemini_2.5_flash"):
     """
     ON-DEMAND avatar pipeline (triggered by /regenerate-stylized, never on upload):
       1. Realistic, face-preserving hero - manifests the user in their recent outfit (~5cr)
@@ -44,7 +44,7 @@ async def _bg_generate_stylized(user_id: str, selfie_url: str, still_only: bool 
 
     # Stage 1: realistic hero (always regenerated on an explicit refresh request).
     try:
-        result = await avatar_pose_service.generate_realistic_hero(user_id, selfie_url, body_url=body_url)
+        result = await avatar_pose_service.generate_realistic_hero(user_id, selfie_url, body_url=body_url, model=model)
         stylized_url = result.get("url")
         logger.info(f"Realistic hero ready for user {user_id}")
     except Exception as e:
@@ -119,10 +119,12 @@ async def upload_selfie(
             user["id"], avatar_selfie_url=public_url, email=user["email"]
         )
 
-    # Cheap profile refresh only (color/body/hair). The avatar/video are ON-DEMAND
-    # now - the user generates them via "Refresh my avatar", so we don't spend
-    # avatar/video credits automatically on upload.
-    if becomes_primary:
+    # First photo ever -> build the avatar automatically (~2cr, still only) so the
+    # Studio shows it without a manual Refresh. If they already have an avatar, just
+    # do the cheap profile refresh (avatar changes stay on the "Refresh my avatar" button).
+    if not current.get("stylized_avatar_url"):
+        background_tasks.add_task(_bg_generate_stylized, user["id"], public_url, still_only=True)
+    elif becomes_primary:
         background_tasks.add_task(_bg_refresh_profile, user["id"], public_url)
 
     return {"selfie_url": public_url, "selfie_urls": selfies}
@@ -160,9 +162,14 @@ async def upload_full_body(
         content_type=file.content_type or "image/jpeg",
     )
     supabase_service.upsert_user(user["id"], full_body_url=public_url, email=user["email"])
-    # Cheap profile refresh only (uses the full-body photo for body/hair). The avatar
-    # is ON-DEMAND - the user triggers it via "Refresh my avatar".
-    background_tasks.add_task(_bg_refresh_profile, user["id"], public_url)
+    # First photo ever -> auto-build the avatar (uses the best face source). Otherwise
+    # just refresh the cheap profile from the new full-body photo.
+    row = supabase_service.get_user(user["id"]) or {}
+    if not row.get("stylized_avatar_url"):
+        face = color_service.best_face_source(row) or public_url
+        background_tasks.add_task(_bg_generate_stylized, user["id"], face, still_only=True)
+    else:
+        background_tasks.add_task(_bg_refresh_profile, user["id"], public_url)
     return {"full_body_url": public_url}
 
 
@@ -376,16 +383,18 @@ async def get_stylized_video(user = Depends(current_user)):
 async def regenerate_stylized(
     background_tasks: BackgroundTasks,
     video: bool = False,
+    model: str = "gemini_2.5_flash",
     user = Depends(current_user),
 ):
-    """On-demand 'Refresh my avatar'. Regenerates the realistic hero still (~5cr).
+    """On-demand 'Refresh my avatar'. Regenerates the realistic hero still (~2-5cr).
+    Default model is Gemini Flash; pass ?model=gen4_image for the gen4 path.
     Pass ?video=true to also (re)generate the ramp-walking video (~60-100cr)."""
     row = supabase_service.get_user(user["id"]) or {}
     selfie = color_service.best_face_source(row)
     if not selfie:
         raise HTTPException(400, "No selfie or full-body photo to use. Upload one first.")
-    background_tasks.add_task(_bg_generate_stylized, user["id"], selfie, still_only=not video)
-    return {"queued": True, "with_video": video}
+    background_tasks.add_task(_bg_generate_stylized, user["id"], selfie, still_only=not video, model=model)
+    return {"queued": True, "with_video": video, "model": model}
 
 
 @router.post("/sync-stylist-kb")

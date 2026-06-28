@@ -2,20 +2,17 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { Plus, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
+import { Plus, Trash2, Sparkles, Shirt, Loader2, Link as LinkIcon, Upload, Check, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { ClosetShelf } from "@/components/wardrobe/ClosetShelf";
 import type { WardrobeItem, DetectedItem } from "@/types";
 
 const CATEGORIES = ["all", "tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"];
 const OCCASIONS = ["any", "casual", "formal", "evening", "sport", "beach"];
-// Fixed display order for the closet shelves (boutique-style top-to-bottom).
-const SHELF_ORDER = ["tops", "outerwear", "bottoms", "dresses", "shoes", "accessories"];
 
 export default function WardrobePage() {
   const { user } = useAuth();
@@ -90,17 +87,9 @@ export default function WardrobePage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto pb-4">
       {loading ? (
-        <div className="closet">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="mb-6">
-              <div className="shimmer" style={{ height: 18, width: 120, borderRadius: 6, marginBottom: 12, opacity: 0.4 }} />
-              <div className="flex gap-5">
-                {Array.from({ length: 5 }).map((_, j) => (
-                  <div key={j} className="shimmer" style={{ width: 140, height: 180, borderRadius: 8, opacity: 0.25 }} />
-                ))}
-              </div>
-              <div className="closet-plank" />
-            </div>
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="surface aspect-[3/4] shimmer" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -114,19 +103,55 @@ export default function WardrobePage() {
           )}
         </div>
       ) : (
-        <div className="closet">
-          {SHELF_ORDER
-            .filter((cat) => filterCategory === "all" || filterCategory === cat)
-            .map((cat) => (
-              <ClosetShelf
-                key={cat}
-                label={cat}
-                items={filtered.filter((it) => it.category === cat)}
-                selectedItemIds={selectedItemIds}
-                onSelect={toggleSelected}
-                onDelete={(item) => setPendingDelete(item)}
-              />
-            ))}
+        <div className="grid grid-cols-4 gap-4">
+          <AnimatePresence>
+            {filtered.map((item, i) => {
+              const selected = selectedItemIds.includes(item.id);
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="surface surface-hover overflow-hidden cursor-pointer relative group"
+                  style={{ borderColor: selected ? "var(--gold)" : undefined }}
+                  onClick={() => toggleSelected(item.id)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.image_url}
+                    alt={item.name}
+                    className="w-full aspect-[3/4] object-cover"
+                  />
+                  {selected && (
+                    <div
+                      className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs"
+                      style={{ background: "var(--gold)", color: "var(--on-gold)" }}
+                    >
+                      {selectedItemIds.indexOf(item.id) + 1}
+                    </div>
+                  )}
+                  <div className="px-4 py-3">
+                    <div className="text-sm truncate" title={item.name}>{item.name}</div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs" style={{ color: "var(--text-dim)" }}>
+                        {item.category}{item.color ? ` · ${item.color}` : ""}
+                      </span>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition"
+                        style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
+                        onClick={(e) => { e.stopPropagation(); setPendingDelete(item); }}
+                        aria-label="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       )}
       </div>
@@ -231,29 +256,35 @@ function AddItemModal({
     }
   }
 
-  // For URL tab: same as before. For Upload tab: detect first, then route to
-  // either single-item upload or the multi-item checklist.
+  // Both tabs detect garments first, then isolate each on a clean background
+  // (single -> add-multi with one item; multiple -> review checklist).
   async function submit() {
     if (tab === "url") {
-      if (!name.trim()) { toast.error("Name is required."); return; }
-      if (!scrapedImage) { toast.error("Scrape a URL first."); return; }
-      setSubmitting(true);
+      if (!scrapedImage) { toast.error("Scrape a URL or paste an image link first."); return; }
+      setPhase("detecting");
       try {
-        const item = await apiPost<WardrobeItem>("/api/wardrobe/from-url", {
-          name,
-          category,
-          occasion,
-          color: color || undefined,
-          brand: brand || undefined,
-          image_url: scrapedImage,
-          source_url: url,
-        });
-        toast.success("Item added.");
-        onAdded(item);
+        const res = await apiPost<{ image_url: string; detected: DetectedItem[] }>(
+          "/api/wardrobe/detect-items-url", { image_url: scrapedImage }
+        );
+        if (!res.detected || res.detected.length === 0) {
+          toast.error("No clothing items detected in that image.");
+          setPhase("form");
+          return;
+        }
+        if (res.detected.length === 1) {
+          const r2 = await apiPost<{ created: WardrobeItem[]; failed: { name: string; reason: string }[] }>(
+            "/api/wardrobe/add-multi", { source_image_url: res.image_url, items: res.detected }
+          );
+          if (r2.created?.length) { toast.success("Item added."); onAddedMany(r2.created); }
+          else { toast.error(`Could not add: ${r2.failed?.[0]?.reason || "unknown"}`); setPhase("form"); }
+          return;
+        }
+        setDetected(res.detected);
+        setDetectedSourceUrl(res.image_url);
+        setPhase("checklist");
       } catch (e) {
-        toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
-      } finally {
-        setSubmitting(false);
+        toast.error(`Detection failed: ${e instanceof Error ? e.message : "unknown"}`);
+        setPhase("form");
       }
       return;
     }
@@ -317,7 +348,7 @@ function AddItemModal({
         );
         onAddedMany(res.created);
       } else {
-        toast.error("Could not add any items. Try again or upload them individually.");
+        toast.error(`Could not add any items: ${res.failed?.[0]?.reason || "unknown error"}. Try again or upload individually.`);
       }
     } catch (e) {
       toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
@@ -404,13 +435,17 @@ function AddItemModal({
             <div className="flex gap-2">
               <input
                 className="input"
-                placeholder="https://amazon.com/dp/... or any product URL"
+                placeholder="Product URL, or paste a direct image link"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
               <button className="btn-secondary" onClick={scrape} disabled={!url.trim() || scraping}>
                 {scraping ? <Loader2 size={16} className="spin" /> : "Scrape"}
               </button>
+            </div>
+            <div className="text-xs mt-2" style={{ color: "var(--text-dim)" }}>
+              Big retailers (H&amp;M, Amazon, Zara) block scraping — for those, right-click the
+              product image, &ldquo;Copy image address&rdquo;, and paste that link here.
             </div>
             {scrapedImage && (
               <div className="surface mt-3 p-3 flex items-center gap-3">
@@ -482,16 +517,20 @@ function DetectedItemsChecklist({
   function update(idx: number, patch: Partial<typeof rows[number]>) {
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   }
+  function remove(idx: number) {
+    setRows((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   const checkedCount = rows.filter((r) => r.checked).length;
 
   return (
     <div>
       <h2 className="font-display text-3xl mb-1">
-        {initial.length} items detected
+        {rows.length} item{rows.length === 1 ? "" : "s"} detected
       </h2>
       <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-        Review, edit, then add. Each item gets isolated as its own clean product shot.
+        Untick to skip, or remove anything you don&apos;t want (e.g. accessories). Adding{" "}
+        <strong style={{ color: "var(--gold)" }}>{checkedCount}</strong>. Each is isolated as a clean product shot.
       </p>
 
       <div className="surface p-3 mb-5 flex items-center gap-3">
@@ -556,6 +595,16 @@ function DetectedItemsChecklist({
                 </div>
               )}
             </div>
+
+            <button
+              onClick={() => remove(i)}
+              className="flex-shrink-0 mt-1"
+              style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer" }}
+              aria-label="Remove this item"
+              title="Remove from list"
+            >
+              <Trash2 size={15} />
+            </button>
           </div>
         ))}
       </div>

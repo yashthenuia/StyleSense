@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import { Send, Loader2, Sparkles, MessageCircle, Mic, Plus } from "lucide-react";
+import { Send, Loader2, Sparkles, MessageCircle, Mic, Plus, Bookmark, Check } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAppStore } from "@/store/app";
 import { useAriaChat } from "@/store/ariaChat";
@@ -70,17 +70,37 @@ export default function StylistPage() {
     if (!selfieUrl) { toast.error("Add a selfie in Avatar Setup first."); return; }
     setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: true } : m)));
     try {
-      const res = await apiPost<{ result_image_url: string }>("/api/tryon/generate-multi", {
+      const res = await apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate-multi", {
         avatar_selfie_url: selfieUrl,
         items: picked.map((it) => ({ image_url: it.image_url, name: it.name, category: it.category })),
         model: useAppStore.getState().tryonModel,
         setting: msg.scene || undefined,
         enhance_prompt: true,
       });
-      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: false, manifestUrl: res.result_image_url } : m)));
+      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: false, manifestUrl: res.result_image_url, manifestId: res.result_id } : m)));
     } catch (e) {
       setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, manifesting: false } : m)));
       toast.error(`Manifest failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  }
+
+  // Save a manifested chat look to the Outfits section.
+  async function saveManifestOutfit(idx: number) {
+    const msg = messages[idx];
+    const picked = items.filter((it) => (msg.suggestedItemIds || []).includes(it.id));
+    if (!msg.manifestUrl || picked.length === 0) return;
+    try {
+      await apiPost("/api/outfits/save", {
+        name: picked.map((it) => it.name).join(" + ").slice(0, 60) || "Aria's look",
+        item_ids: picked.map((it) => it.id),
+        preview_image_url: msg.manifestUrl,
+        tryon_result_id: msg.manifestId,
+        notes: "Saved from Aria chat",
+      });
+      setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, savedOutfit: true } : m)));
+      toast.success("Saved to your Outfits.");
+    } catch (e) {
+      toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
   }
 
@@ -177,7 +197,9 @@ export default function StylistPage() {
                           items={items}
                           manifesting={!!m.manifesting}
                           manifestUrl={m.manifestUrl}
+                          savedOutfit={!!m.savedOutfit}
                           onManifest={selfieUrl ? () => manifestLook(i) : undefined}
+                          onSaveOutfit={() => saveManifestOutfit(i)}
                         />
                       </div>
                     </motion.div>
@@ -298,17 +320,27 @@ export default function StylistPage() {
 }
 
 function FormattedReply({
-  content, itemIds, items, manifesting, manifestUrl, onManifest,
+  content, itemIds, items, manifesting, manifestUrl, savedOutfit, onManifest, onSaveOutfit,
 }: {
   content: string;
   itemIds: string[];
   items: WardrobeItem[];
   manifesting?: boolean;
   manifestUrl?: string;
+  savedOutfit?: boolean;
   onManifest?: () => void;
+  onSaveOutfit?: () => void;
 }) {
-  // Strip the [ITEM:id] tokens from the displayed text but show them as cards below
-  const stripped = content.replace(/\s*\[ITEM:[a-zA-Z0-9\-]+\]/g, "");
+  // Strip the [ITEM:id] tokens from the displayed text (shown as cards below) and
+  // tidy up so markdown bold still renders (e.g. "**[ITEM:x] Name**" -> "**Name**";
+  // markdown ignores "** text**" with a space right after the **).
+  const stripped = content
+    .replace(/\s*\[ITEM:[a-zA-Z0-9\-]+\]\s*/g, " ")
+    .replace(/\*\*\s+/g, "**")
+    .replace(/\s+\*\*/g, "**")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
   const referenced = items.filter((it) => itemIds.includes(it.id));
   return (
     <div>
@@ -336,7 +368,7 @@ function FormattedReply({
               style={{ background: "var(--surface3)", color: "var(--text)", textDecoration: "none" }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={it.cutout_url || it.image_url} alt={it.name} style={{ width: 24, height: 24, objectFit: "contain", borderRadius: 4 }} />
+              <img src={it.image_url} alt={it.name} style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
               <span>{it.name}</span>
             </Link>
           ))}
@@ -346,12 +378,24 @@ function FormattedReply({
       {referenced.length > 0 && onManifest && (
         <div className="mt-3">
           {manifestUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={manifestUrl}
-              alt="Your look"
-              style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }}
-            />
+            <div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={manifestUrl}
+                alt="Your look"
+                style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }}
+              />
+              {onSaveOutfit && (
+                <button
+                  className="btn-secondary mt-2"
+                  onClick={onSaveOutfit}
+                  disabled={savedOutfit}
+                  style={{ padding: "0.4rem 0.8rem", fontSize: "0.78rem" }}
+                >
+                  {savedOutfit ? (<><Check size={13} /> Saved to Outfits</>) : (<><Bookmark size={13} /> Save to Outfits</>)}
+                </button>
+              )}
+            </div>
           ) : (
             <button
               className="btn-primary"

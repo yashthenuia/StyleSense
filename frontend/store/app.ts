@@ -26,6 +26,9 @@ interface AppState {
   videoModel: string;
   setTryonModel: (id: string) => void;
   setVideoModel: (id: string) => void;
+  // Wipe per-user data (called when the signed-in account changes / on logout).
+  // Keeps model preferences, which aren't user-identifying.
+  resetUserData: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -52,6 +55,14 @@ export const useAppStore = create<AppState>()(
       setSelfieOnly: (selfieUrl) => set({ avatarSelfieUrl: selfieUrl }),
       setStylized: (url, status) => set({ stylizedAvatarUrl: url, stylizedAvatarStatus: status }),
       setStylizedVideo: (url, status) => set({ stylizedVideoUrl: url, stylizedVideoStatus: status }),
+      resetUserData: () => set({
+        selectedItemIds: [],
+        avatarSelfieUrl: null,
+        stylizedAvatarUrl: null,
+        stylizedAvatarStatus: null,
+        stylizedVideoUrl: null,
+        stylizedVideoStatus: null,
+      }),
     }),
     {
       name: "styleai-app-state",
