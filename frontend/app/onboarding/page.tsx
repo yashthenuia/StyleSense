@@ -8,7 +8,14 @@ import { apiGet, apiUpload, apiDelete } from "@/lib/api";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 
-const DICEBEAR_SEEDS = ["Felix", "Mia", "Jordan", "Alex", "Sam", "Taylor"];
+const PORTRAIT_SAMPLES = [
+  { name: "Amara",  url: "https://randomuser.me/api/portraits/women/8.jpg"  },
+  { name: "Sofia",  url: "https://randomuser.me/api/portraits/women/17.jpg" },
+  { name: "Priya",  url: "https://randomuser.me/api/portraits/women/33.jpg" },
+  { name: "Marcus", url: "https://randomuser.me/api/portraits/men/36.jpg"   },
+  { name: "James",  url: "https://randomuser.me/api/portraits/men/51.jpg"   },
+  { name: "Elena",  url: "https://randomuser.me/api/portraits/women/60.jpg" },
+];
 
 interface SelfieListResponse {
   selfie_urls: string[];
@@ -116,9 +123,9 @@ export default function OnboardingPage() {
     }
   }
 
-  function selectDicebear(seed: string) {
-    setSelectedSeed(seed);
-    setSelfieOnly(`https://api.dicebear.com/10.x/open-peeps/svg?seed=${seed}`);
+  function selectPortrait(name: string, url: string) {
+    setSelectedSeed(name);
+    setSelfieOnly(url);
   }
 
   function handleBodyPhoto(file: File) {
@@ -354,24 +361,24 @@ export default function OnboardingPage() {
           </section>
         </div>
 
-        {/* RIGHT: Illustrated defaults */}
+        {/* RIGHT: Sample face photos */}
         <div className="flex flex-col min-h-0 overflow-y-auto">
           <section className="surface p-5 flex-1">
             <div
               className="text-xs uppercase tracking-widest mb-3"
               style={{ color: "var(--text-muted)" }}
             >
-              Or start with a look
+              Or try with a sample look
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              {DICEBEAR_SEEDS.map((seed) => {
-                const isSelected = selectedSeed === seed && selfies.length === 0;
+              {PORTRAIT_SAMPLES.map(({ name, url }) => {
+                const isSelected = selectedSeed === name && selfies.length === 0;
                 return (
                   <button
-                    key={seed}
-                    onClick={() => selectDicebear(seed)}
-                    title={seed}
+                    key={name}
+                    onClick={() => selectPortrait(name, url)}
+                    title={name}
                     style={{
                       background: "var(--surface2)",
                       padding: 0,
@@ -380,21 +387,25 @@ export default function OnboardingPage() {
                       outline: isSelected ? "2px solid #513229" : "2px solid transparent",
                       outlineOffset: 2,
                       transition: "outline-color 0.1s",
+                      overflow: "hidden",
                     }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`https://api.dicebear.com/10.x/open-peeps/svg?seed=${seed}`}
-                      alt={seed}
-                      style={{ width: "100%", aspectRatio: "1 / 1", display: "block" }}
+                      src={url}
+                      alt={name}
+                      style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", display: "block" }}
                     />
+                    <div className="text-[10px] py-1 text-center" style={{ color: "var(--text-muted)" }}>
+                      {name}
+                    </div>
                   </button>
                 );
               })}
             </div>
 
             <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
-              Upload a selfie for photoreal try-ons. These are illustrated placeholders.
+              Upload your own selfie for personalised try-ons.
             </p>
           </section>
         </div>

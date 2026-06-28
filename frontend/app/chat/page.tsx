@@ -403,9 +403,13 @@ function Bubble({ m, mine, onOpenTryOn, onOpenOutfit, onOpenImage }: {
             onClick={() => onOpenImage(m.shared_image_url!)}
           />
         )}
-        {m.shared_caption && <div className="text-xs italic mb-1" style={{ color: "var(--text-muted)" }}>{m.shared_caption}</div>}
+        {m.shared_caption && (
+          <div className="text-xs italic mb-1" style={{ color: mine ? "rgba(215,212,177,0.7)" : "var(--text-muted)" }}>
+            {m.shared_caption}
+          </div>
+        )}
         {m.content && <div className="text-sm whitespace-pre-wrap">{m.content}</div>}
-        <div className="text-[10px] mt-1 text-right" style={{ color: "var(--text-dim)" }}>
+        <div className="text-[10px] mt-1 text-right" style={{ color: mine ? "rgba(215,212,177,0.5)" : "var(--text-dim)" }}>
           {timeShort(m.created_at)}
         </div>
       </div>

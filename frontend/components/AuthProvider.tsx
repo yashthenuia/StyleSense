@@ -38,8 +38,15 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
   const [loading, setLoading] = useState(false);
 
   const fetchProfile = useCallback(async (uid: string) => {
-    const { data } = await supabase.from("users").select("*").eq("id", uid).single();
-    if (data) setProfile(data as Profile);
+    // users table has selfie/avatar fields; profiles table has share_code + social fields.
+    // Merge both so the Profile context has everything.
+    const [u, p] = await Promise.all([
+      supabase.from("users").select("*").eq("id", uid).single(),
+      supabase.from("profiles").select("share_code, username, full_name, avatar_url, email").eq("id", uid).single(),
+    ]);
+    if (u.data || p.data) {
+      setProfile({ ...(u.data || {}), ...(p.data || {}) } as Profile);
+    }
   }, [supabase]);
 
   useEffect(() => {
