@@ -199,19 +199,22 @@ function CategoryCard({ entry, index }: { entry: ArchiveEntry; index: number }) 
         className="surface surface-hover block overflow-hidden relative"
         style={{ textDecoration: "none", color: "inherit", border: "1px solid var(--ink)" }}
       >
-        <AnimatePresence mode="wait">
-          <motion.img
-            key={imgIdx}
-            src={entry.previews[imgIdx]}
-            alt={entry.category}
-            className="w-full aspect-[4/5] object-cover"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            // eslint-disable-next-line @next/next/no-img-element
-          />
-        </AnimatePresence>
+        {/* Absolute stack: old image stays visible while new one fades in — no blink */}
+        <div className="relative w-full overflow-hidden" style={{ aspectRatio: "4/5" }}>
+          <AnimatePresence>
+            <motion.img
+              key={imgIdx}
+              src={entry.previews[imgIdx]}
+              alt={entry.category}
+              className="absolute inset-0 w-full h-full object-cover"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6 }}
+              // eslint-disable-next-line @next/next/no-img-element
+            />
+          </AnimatePresence>
+        </div>
         <div
           className="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center justify-between"
           style={{ background: "var(--ink)", color: "var(--bg)" }}

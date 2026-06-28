@@ -9,12 +9,12 @@ import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 
 const PORTRAIT_SAMPLES = [
-  { name: "Amara",  url: "https://randomuser.me/api/portraits/women/8.jpg"  },
-  { name: "Sofia",  url: "https://randomuser.me/api/portraits/women/17.jpg" },
-  { name: "Priya",  url: "https://randomuser.me/api/portraits/women/33.jpg" },
-  { name: "Marcus", url: "https://randomuser.me/api/portraits/men/36.jpg"   },
-  { name: "James",  url: "https://randomuser.me/api/portraits/men/51.jpg"   },
-  { name: "Elena",  url: "https://randomuser.me/api/portraits/women/60.jpg" },
+  { name: "Amara", url: "/avatars/sample-1.jpg" },
+  { name: "Mei",   url: "/avatars/sample-2.jpg" },
+  { name: "Sofia", url: "/avatars/sample-3.jpg" },
+  { name: "Yuki",  url: "/avatars/sample-4.jpg" },
+  { name: "Elle",  url: "/avatars/sample-5.jpg" },
+  { name: "Luna",  url: "/avatars/sample-6.jpg" },
 ];
 
 interface SelfieListResponse {
