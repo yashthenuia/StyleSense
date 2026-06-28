@@ -46,6 +46,8 @@ export interface ChatMessage {
   manifesting?: boolean;      // an inline try-on is generating
   manifestUrl?: string;       // the generated look, shown inline in the bubble
   photoUrl?: string;          // user-uploaded photo shown in their chat bubble
+  manifestId?: string;        // the try-on result id (to save it as an outfit)
+  savedOutfit?: boolean;      // this manifested look was saved to Outfits
 }
 
 export interface DetectedItem {

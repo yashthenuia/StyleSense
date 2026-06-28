@@ -63,20 +63,41 @@ async def scrape_product_url(req: ScrapeRequest, user = Depends(current_user)):
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
+    # If the pasted link is already a direct image (e.g. an H&M image URL the user copied
+    # via "Copy image address"), use it as-is - no page scrape needed. This makes
+    # bot-blocked retailers (H&M, Amazon, Zara) usable: right-click the product image ->
+    # Copy image address -> paste here.
+    path = url.split("?")[0].lower()
+    if path.endswith((".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif")):
+        name = url.split("/")[-1].split("?")[0].rsplit(".", 1)[0].replace("-", " ").replace("_", " ")[:80] or "Product"
+        return ScrapeResponse(
+            image_url=url, name=name, source_url=url,
+            suggested_category=suggest_category_from_url(name) or "tops",
+        )
+
+    BLOCKED_MSG = (
+        "This retailer (H&M, Amazon, Zara and similar) blocks automatic scraping. "
+        "Right-click the product image, choose 'Copy image address', and paste that "
+        "image link here instead."
+    )
+
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0, headers=HEADERS) as client:
             resp = await client.get(url)
+            # Some links resolve directly to an image even without an image extension.
+            if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image/"):
+                name = url.split("/")[-1].split("?")[0][:80] or "Product"
+                return ScrapeResponse(
+                    image_url=url, name=name, source_url=url,
+                    suggested_category=suggest_category_from_url(name) or "tops",
+                )
     except httpx.TimeoutException:
-        raise HTTPException(408, "URL timed out. Try pasting the image URL directly.")
+        raise HTTPException(408, "URL timed out. " + BLOCKED_MSG)
     except Exception as e:
         raise HTTPException(400, f"Could not fetch URL: {e}")
 
     if resp.status_code != 200:
-        raise HTTPException(
-            400,
-            f"Site returned {resp.status_code}. Some sites (Amazon) block scrapers - "
-            "right-click the product image, copy address, then paste it directly.",
-        )
+        raise HTTPException(400, f"Site returned {resp.status_code}. {BLOCKED_MSG}")
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -85,10 +106,7 @@ async def scrape_product_url(req: ScrapeRequest, user = Depends(current_user)):
         image_url = _extract_largest_img(soup, url)
 
     if not image_url:
-        raise HTTPException(
-            400,
-            "Could not find a product image on the page. Paste the image URL directly instead.",
-        )
+        raise HTTPException(400, "Could not find a product image on the page. " + BLOCKED_MSG)
 
     if image_url.startswith("//"):
         image_url = "https:" + image_url

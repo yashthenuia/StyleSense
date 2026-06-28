@@ -13,6 +13,7 @@ A small stateful graph that makes the stylist reason like a real one:
 
 Nodes call the existing anthropic client directly (no langchain-anthropic).
 """
+import os
 import logging
 from typing import Optional, TypedDict
 
@@ -21,6 +22,9 @@ from langgraph.graph import StateGraph, START, END
 from services import supabase_service, anthropic_service, style_kb, color_service
 
 logger = logging.getLogger(__name__)
+
+# Stronger model for the actual outfit reasoning (Haiku is the fast fallback).
+ADVISE_MODEL = os.getenv("ARIA_ADVISE_MODEL", "claude-sonnet-4-6")
 
 
 class AriaState(TypedDict, total=False):
@@ -72,37 +76,41 @@ def _scene_for_occasion(occasion: Optional[str], user_text: str) -> Optional[str
     return None
 
 
-SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist for the user. Warm, specific, honest, concise.
+SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist. Warm, specific, honest, concise.
 
 # USER'S REVEALED PREFERENCES (from this-or-that choices — prioritise these when styling)
 {preferences}
 
-# HOW TO RECOMMEND
-- START FROM THE OCCASION and its dress code, then build a COMPLETE outfit appropriate to it
-  (top + bottom, or a dress, plus a layer / shoes / one accessory when relevant) - not a single item.
-- VARY BY OCCASION: a formal event, a beach day and a casual brunch must get clearly DIFFERENT outfits.
-  Never default to the same hero piece for every occasion. If one item genuinely works for several
-  occasions, style it DIFFERENTLY each time and say how (layers, tuck, shoes, accessories).
-- Recommend real wardrobe items by exact name, tagging each `[ITEM:<id>]` so the UI makes it clickable.
-- The STYLE PROFILE is a REFINEMENT, not the selector: among the occasion-appropriate pieces, prefer
-  ones in their flattering colors and silhouettes for their body type; briefly say why.
-- GAPS: if the wardrobe can't cover the occasion, recommend the specific garment TYPES to add
-  (e.g. "a tailored navy blazer") with one reason each - while still tagging items that DO work.
-- If body type is "unknown", give solid general advice and gently suggest adding a full-body photo in
-  Avatar Setup. If the wardrobe is empty, name the key pieces to add. If you can't know something
-  (e.g. weather), say so.
+# HOW TO PICK THE BEST OUTFIT (reason before you reply)
+1. Read the user's EXACT request - the occasion/dress code, vibe, a specific item they named, or a
+   constraint (weather, color). Anchor everything to what they actually asked.
+2. SCAN the wardrobe SECTIONS below (grouped by category). Build the single BEST complete outfit FROM
+   WHAT THEY OWN: pick ONE top + ONE bottom (or ONE dress), then add outerwear / shoes / one accessory
+   only when they improve the look. Choose the items that best match the request, not the first ones.
+3. Refine with the STYLE PROFILE: among suitable pieces, prefer their flattering colors and silhouettes
+   for their body type, and say one reason WHY a piece works for them.
+4. VARY BY OCCASION - a formal dinner, a beach day and the gym must get clearly different outfits; never
+   default to the same hero piece. If one item fits several occasions, restyle it (layers/tuck/shoes).
+5. GAPS: if the wardrobe genuinely can't cover the request, still build the closest outfit from what they
+   own, THEN name the specific garment TYPE to add (e.g. "a tailored rust blazer") with one reason.
 
-# FORMAT (render as Markdown)
-- One short intro line, then a bulleted outfit list (ONE piece per bullet), then ONE short styling tip.
-- Use **bold** only for the key pieces. Keep the whole reply under ~120 words.
+# RULES
+- Only recommend REAL items from the wardrobe, by their exact name, with the tag AFTER the name:
+  "the Cream sweatshirt [ITEM:abc-123]". Never invent items or IDs; only tag wardrobe items.
+- If body type is "unknown", give solid general advice + gently suggest a full-body photo in Avatar
+  Setup. If the wardrobe is empty, name the key starter pieces. If you can't know something (weather), say so.
+
+# FORMAT (Markdown)
+- One short intro line, then a bulleted outfit list (ONE piece per bullet, newest-first is fine), then
+  ONE short styling tip. Bold ONLY the item name like **Name** (the tag goes right after). Under ~120 words.
 
 # USER'S STYLE PROFILE
 {color_profile}
 
-# STYLING KNOWLEDGE (reference, research-grounded)
+# STYLING KNOWLEDGE (research-grounded reference - apply, don't quote)
 {kb}
 
-# USER'S WARDROBE (each item shows category + occasion - match them to the asked occasion)
+# USER'S WARDROBE (grouped by category; build the outfit slot by slot)
 {wardrobe}
 """
 
@@ -191,13 +199,16 @@ def _advise(state: AriaState) -> dict:
     if not msgs or msgs[-1]["role"] != "user":
         raise ValueError("Last message must be from the user.")
 
-    resp = anthropic_service.client.messages.create(
-        model=anthropic_service.MODEL,
-        max_tokens=512,
-        temperature=0.7,  # a little variety so occasions don't collapse to one outfit
-        system=system,
-        messages=msgs,
-    )
+    # Stronger reasoning model for outfit decisions (falls back to Haiku if unavailable).
+    try:
+        resp = anthropic_service.client.messages.create(
+            model=ADVISE_MODEL, max_tokens=600, temperature=0.7, system=system, messages=msgs,
+        )
+    except Exception as e:
+        logger.warning(f"advise model {ADVISE_MODEL} failed ({e}); falling back to {anthropic_service.MODEL}")
+        resp = anthropic_service.client.messages.create(
+            model=anthropic_service.MODEL, max_tokens=600, temperature=0.7, system=system, messages=msgs,
+        )
     reply = "".join(b.text for b in resp.content if hasattr(b, "text")).strip()
     return {"reply": reply, "item_ids": anthropic_service.extract_item_ids(reply)}
 

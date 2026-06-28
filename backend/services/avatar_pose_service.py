@@ -86,12 +86,12 @@ async def generate_realistic_hero(
     user_id: str,
     selfie_url: str,
     body_url: str | None = None,
+    model: str = "gemini_2.5_flash",
 ) -> dict:
     """
-    Realistic, face-preserving Studio hero: manifest the user (via the gen4 try-on
-    approach that keeps their real face) in their most-recent wardrobe outfit, in a
-    premium studio setting. Uses BOTH the face selfie and, when present, the full-body
-    photo as references (gen4 tolerates the body ref - no clothing bleed). Saves
+    Realistic, face-preserving Studio hero: manifest the user in their most-recent
+    wardrobe outfit, premium studio. Default model is Gemini 2.5 Flash (more polished);
+    pass model='gen4_image' for the tagged-reference / body-ref path. Saves
     users.stylized_avatar_url. On-demand only (called by /regenerate-stylized).
     """
     from services import runway_service, image_service
@@ -114,40 +114,61 @@ async def generate_realistic_hero(
             "tryons", user_id, comp, "hero-outfit.jpg", "image/jpeg")
         outfit_name = " + ".join(c["name"] for c in chosen)
 
-    # References (max 3 for gen4): selfie (+ body) + garment. Pad tall photos.
-    refs = [{"uri": await _safe_ref(user_id, selfie_url), "tag": "selfie"}]
-    if body_url and body_url != selfie_url:
-        refs.append({"uri": await _safe_ref(user_id, body_url), "tag": "body"})
-    if garment_url:
-        refs.append({"uri": garment_url, "tag": "garment"})
+    safe_selfie = await _safe_ref(user_id, selfie_url)
+    # Body-type hint from the cached style profile nudges the generated body toward the user.
+    prof = (supabase_service.get_user(user_id) or {}).get("color_profile") or {}
+    bt = (prof.get("body_type") or "").replace("_", " ").strip()
+    body_type = bt if bt and bt != "unknown" else "natural"
 
-    body_clause = (
-        "with the real body shape and proportions from @body " if len(refs) > 1 and refs[1]["tag"] == "body"
-        else ""
-    )
-    garment_clause = (
-        f"wearing the {outfit_name} from @garment (use ONLY the clothing from @garment, ignore any model in it)"
-        if garment_url else f"wearing {outfit_name}"
-    )
-    prompt = (
-        f"Photorealistic full-body editorial fashion photograph of the person from @selfie - "
-        f"preserve their exact face, facial hair, eyebrows, hairstyle, hair color and skin tone - "
-        f"{body_clause}{garment_clause}. Premium fashion studio: clean warm grey backdrop, soft "
-        f"cinematic lighting with a subtle gold rim light, background in sharp focus. Natural realistic "
-        f"skin texture, magazine quality, full-frame camera. Confident relaxed pose, head to feet."
-    )[:1000]
+    if runway_service._is_gemini(model):
+        # Gemini reads images by ORDER and breaks with 3 refs -> garment IMAGE 1, person LAST,
+        # NO body ref. Strong face-lock + a body-type hint so it retains face + body better.
+        ratio = "832:1248"
+        refs = [{"uri": garment_url, "tag": "garment"}, {"uri": safe_selfie, "tag": "selfie"}] if garment_url \
+            else [{"uri": safe_selfie, "tag": "selfie"}]
+        prompt = (
+            f"Photorealistic full-body editorial fashion photograph, the WHOLE body from head to feet. "
+            f"{('IMAGE 1 = the ' + outfit_name + ': use ONLY its clothing, ignore any model wearing it. ') if garment_url else ''}"
+            f"The LAST image is the real person - recreate THAT exact person wearing the outfit. Their face "
+            f"must be IDENTICAL to the last image: same face shape, jawline, facial hair and beard, eyebrows, "
+            f"hairline, hairstyle, hair color, skin tone and complexion - do NOT beautify, slim, smooth, age or "
+            f"idealize the face. Give them a true-to-life {body_type} build with realistic proportions. "
+            f"Premium fashion studio: clean warm grey backdrop, soft cinematic lighting with a subtle gold rim "
+            f"light, background in sharp focus. Natural skin texture, magazine quality. Confident standing pose."
+        )[:1000]
+    else:
+        # gen4: tagged refs, selfie + body + garment (max 3).
+        ratio = "720:1280"
+        refs = [{"uri": safe_selfie, "tag": "selfie"}]
+        if body_url and body_url != selfie_url:
+            refs.append({"uri": await _safe_ref(user_id, body_url), "tag": "body"})
+        if garment_url:
+            refs.append({"uri": garment_url, "tag": "garment"})
+        body_clause = "with the real body shape and proportions from @body " if len(refs) > 1 and refs[1]["tag"] == "body" else ""
+        garment_clause = (
+            f"wearing the {outfit_name} from @garment (use ONLY the clothing from @garment, ignore any model in it)"
+            if garment_url else f"wearing {outfit_name}"
+        )
+        prompt = (
+            f"Photorealistic full-body editorial fashion photograph of the person from @selfie - preserve their "
+            f"exact face, facial hair, eyebrows, hairstyle, hair color and skin tone - {body_clause}{garment_clause}. "
+            f"Premium fashion studio: clean warm grey backdrop, soft cinematic lighting with a subtle gold rim "
+            f"light, background in sharp focus. Natural realistic skin texture, magazine quality, full-frame "
+            f"camera. Confident relaxed pose, head to feet."
+        )[:1000]
 
     try:
         supabase_service.upsert_user(
             user_id, stylized_avatar_status="generating",
-            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero",
+            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero|{model}",
         )
     except Exception as e:
         logger.warning(f"Could not mark hero generating: {e}")
 
     try:
         task = runway_client.text_to_image.create(
-            model="gen4_image", prompt_text=prompt, ratio="720:1280", reference_images=refs[:3],
+            model=model, prompt_text=prompt, ratio=ratio, reference_images=refs[:3],
+            seed=runway_service._seed_for(selfie_url),  # consistent face per photo
         ).wait_for_task_output(timeout=240)
     except (TaskFailedError, TaskTimeoutError) as e:
         try:
@@ -165,7 +186,7 @@ async def generate_realistic_hero(
     try:
         supabase_service.upsert_user(
             user_id, stylized_avatar_url=permanent_url, stylized_avatar_status="ready",
-            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero",
+            stylized_avatar_source_selfie=f"{selfie_url}|{body_url or ''}|hero|{model}",
         )
     except Exception as e:
         logger.warning(f"Could not save hero url: {e}")

@@ -3,6 +3,29 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import type { Session, User, AuthChangeEvent } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { useAriaChat } from "@/store/ariaChat";
+import { useAppStore } from "@/store/app";
+
+// Clear per-user client state (Aria chat + cached avatar/selfie) so a different
+// account on the same browser never inherits the previous user's data.
+function clearUserScopedStores() {
+  try {
+    useAriaChat.getState().reset();
+    useAppStore.getState().resetUserData();
+  } catch {
+    // stores not ready yet - ignore
+  }
+}
+
+// Wipe stores when the signed-in user id differs from the last one we saw.
+function syncUserScope(uid: string | null) {
+  if (typeof window === "undefined") return;
+  const last = window.localStorage.getItem("stylesense-last-user");
+  if (uid && uid !== last) {
+    if (last) clearUserScopedStores(); // a different account took over this browser
+    window.localStorage.setItem("stylesense-last-user", uid);
+  }
+}
 
 export interface Profile {
   id: string;
@@ -51,12 +74,14 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+      syncUserScope(session?.user?.id ?? null);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) fetchProfile(session.user.id);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, sess: Session | null) => {
+      syncUserScope(sess?.user?.id ?? null);
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
@@ -77,6 +102,8 @@ export function AuthProvider({ children, initialUser, initialProfile }: {
 
   const signOut = useCallback(async () => {
     setLoading(true);
+    clearUserScopedStores();
+    if (typeof window !== "undefined") window.localStorage.removeItem("stylesense-last-user");
     await supabase.auth.signOut();
     // Hard navigation so the middleware re-evaluates with cleared cookies.
     // router.push is a client-side SPA nav and doesn't re-run the middleware.

@@ -14,6 +14,7 @@ Quality strategy (informed by competitor benchmarking):
 """
 import io
 import os
+import hashlib
 import logging
 import httpx
 from PIL import Image
@@ -127,6 +128,13 @@ PROMPT_TRYON_MULTI_GEMINI = (
 )
 
 
+def _seed_for(url: str) -> int:
+    """Stable per-photo seed so the same selfie reproduces the same identity across
+    generations (Runway's seed: same seed + params -> similar result). Changes only
+    when the user uploads a new photo (new URL). Range: uint32."""
+    return int(hashlib.sha256((url or "").encode()).hexdigest(), 16) % 4294967295
+
+
 def _is_gemini(model: str) -> bool:
     return model.startswith("gemini")
 
@@ -139,9 +147,12 @@ def _fit_prompt(template: str, *, setting: str, **kwargs) -> str:
     room = max(0, 1000 - len(base) - 2)
     return template.format(setting=setting[:room], **kwargs)
 
+# Shared default backdrop used by BOTH gen4 and Gemini try-ons when the user gives no
+# occasion/scene, and matched to the avatar hero's studio (avatar_pose_service EDITORIAL)
+# so the avatar, manifests and video all share ONE consistent background by default.
 DEFAULT_SETTING = (
-    "in a bright, airy photography studio with a clean warm-neutral backdrop, soft even diffused daylight, "
-    "the background tidy and in sharp focus"
+    "in a premium fashion studio with a clean warm grey backdrop, soft cinematic lighting "
+    "and a subtle gold rim light, the background tidy and in sharp focus"
 )
 
 
@@ -255,6 +266,7 @@ def runway_generate_tryon(
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
             reference_images=reference_images,
+            seed=_seed_for(avatar_url),  # consistent face per photo across generations
         ).wait_for_task_output(timeout=300)
 
         return {
@@ -338,6 +350,7 @@ def runway_generate_multi_tryon(
             prompt_text=prompt,
             ratio=_to_aspect_ratio(model),
             reference_images=reference_images,
+            seed=_seed_for(avatar_url),  # consistent face per photo across generations
         ).wait_for_task_output(timeout=300)
 
         return {

@@ -31,6 +31,9 @@ interface AppState {
   bodyPhotoUrl: string | null;
   setBodyType: (type: "female" | "male" | null) => void;
   setBodyPhotoUrl: (url: string | null) => void;
+  // Wipe per-user data (called when the signed-in account changes / on logout).
+  // Keeps model preferences, which aren't user-identifying.
+  resetUserData: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -61,6 +64,16 @@ export const useAppStore = create<AppState>()(
       setSelfieOnly: (selfieUrl) => set({ avatarSelfieUrl: selfieUrl }),
       setStylized: (url, status) => set({ stylizedAvatarUrl: url, stylizedAvatarStatus: status }),
       setStylizedVideo: (url, status) => set({ stylizedVideoUrl: url, stylizedVideoStatus: status }),
+      resetUserData: () => set({
+        selectedItemIds: [],
+        avatarSelfieUrl: null,
+        stylizedAvatarUrl: null,
+        stylizedAvatarStatus: null,
+        stylizedVideoUrl: null,
+        stylizedVideoStatus: null,
+        bodyType: null,
+        bodyPhotoUrl: null,
+      }),
     }),
     {
       name: "styleai-app-state",
