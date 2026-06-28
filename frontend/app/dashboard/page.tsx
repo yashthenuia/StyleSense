@@ -48,6 +48,33 @@ export default function DashboardPage() {
             Your Digital Runway
           </h1>
 
+          {/* Stats row — derived from already-fetched data, no extra BE calls */}
+          {(items.length > 0 || recent.length > 0) && (
+            <div className="flex items-center gap-3 flex-wrap -mt-1">
+              {items.length > 0 && (
+                <span className="font-mono text-xs" style={{ color: "var(--text-dim)" }}>
+                  {items.length} items
+                </span>
+              )}
+              {archive.length > 0 && (
+                <>
+                  <span style={{ color: "var(--border)" }}>·</span>
+                  <span className="font-mono text-xs" style={{ color: "var(--text-dim)" }}>
+                    {archive.length} {archive.length === 1 ? "category" : "categories"}
+                  </span>
+                </>
+              )}
+              {recent.length > 0 && (
+                <>
+                  <span style={{ color: "var(--border)" }}>·</span>
+                  <span className="font-mono text-xs" style={{ color: "var(--text-dim)" }}>
+                    {recent.length} saved {recent.length === 1 ? "look" : "looks"}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Hero ramp video */}
           <HeroVideo />
 

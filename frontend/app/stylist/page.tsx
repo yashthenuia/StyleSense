@@ -415,12 +415,23 @@ export default function StylistPage() {
 
 // ── This or That ─────────────────────────────────────────────────────────────
 
+interface StyleCard {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  cutout_url?: string;
+  category?: string;
+}
+
 function ThisOrThat({ items }: { items: WardrobeItem[] }) {
-  const [pairIdx, setPairIdx] = useState(0);
+  const [mode, setMode] = useState<"items" | "styles">("items");
   const [choices, setChoices] = useState(0);
   const [lastPick, setLastPick] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Stable shuffle — regenerates only when item count changes (new items added)
+  // Item mode — client-side shuffle for zero latency
+  const [pairIdx, setPairIdx] = useState(0);
   const pairs = useMemo(() => {
     const arr = [...items].sort(() => Math.random() - 0.5);
     const out: { a: WardrobeItem; b: WardrobeItem }[] = [];
@@ -429,21 +440,79 @@ function ThisOrThat({ items }: { items: WardrobeItem[] }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
 
-  if (items.length < 2) {
+  // Style archetype mode — backend pairs
+  const [stylePair, setStylePair] = useState<{ pair_id: string; item_a: StyleCard; item_b: StyleCard } | null>(null);
+  const [loadingStyle, setLoadingStyle] = useState(false);
+
+  async function fetchStylePair() {
+    setLoadingStyle(true);
+    try {
+      const d = await apiGet<{ pair_id: string; item_a: StyleCard; item_b: StyleCard }>(
+        "/api/stylist/this-or-that?type=styles"
+      );
+      setStylePair(d);
+    } catch {
+      toast.error("Could not load style pair.");
+    } finally {
+      setLoadingStyle(false);
+    }
+  }
+
+  useEffect(() => {
+    if (mode === "styles" && !stylePair) fetchStylePair();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  async function pickItem(chosen: WardrobeItem, other: WardrobeItem) {
+    setLastPick(chosen.name);
+    setChoices((c) => c + 1);
+    setPairIdx((i) => i + 1);
+    setSaving(true);
+    try {
+      await apiPost("/api/stylist/this-or-that", {
+        pair_id: `local-${Date.now()}`,
+        question_type: "items",
+        item_a_id: chosen.id,
+        item_b_id: other.id,
+        chosen_id: chosen.id,
+      });
+    } catch { /* non-fatal */ } finally { setSaving(false); }
+  }
+
+  async function pickStyle(chosen: StyleCard, other: StyleCard) {
+    setLastPick(chosen.name);
+    setChoices((c) => c + 1);
+    setSaving(true);
+    try {
+      await apiPost("/api/stylist/this-or-that", {
+        pair_id: stylePair?.pair_id || `style-${Date.now()}`,
+        question_type: "styles",
+        item_a_id: chosen.id,
+        item_b_id: other.id,
+        chosen_id: chosen.id,
+        chosen_name: chosen.name,
+        rejected_name: other.name,
+      });
+    } catch { /* non-fatal */ } finally { setSaving(false); }
+    fetchStylePair();
+  }
+
+  const feedbackLine =
+    choices === 0 ? "Aria will use your choices to personalise every recommendation." :
+    choices < 3  ? `Noted. ${3 - choices} more choice${3 - choices !== 1 ? "s" : ""} to warm up Aria.` :
+    choices < 7  ? `Style fingerprint forming (${choices} data points) — chat with Aria to see it.` :
+                   `Aria has a strong read on your aesthetic (${choices} choices) ✓`;
+
+  if (items.length < 2 && mode === "items") {
     return (
       <div className="surface flex-1 flex flex-col items-center justify-center p-8 text-center" style={{ color: "var(--text-muted)" }}>
         <Shuffle size={28} className="mb-3" style={{ color: "var(--text-dim)" }} />
-        <p className="text-sm">Add at least two items to your wardrobe to start training your style fingerprint.</p>
+        <p className="text-sm mb-3">Add at least two items to your wardrobe to compare pieces.</p>
+        <button className="chip" onClick={() => setMode("styles")}>
+          Switch to style archetypes →
+        </button>
       </div>
     );
-  }
-
-  const pair = pairs[pairIdx % pairs.length];
-
-  function pick(item: WardrobeItem) {
-    setLastPick(item.name);
-    setChoices((c) => c + 1);
-    setPairIdx((i) => i + 1);
   }
 
   return (
@@ -453,93 +522,161 @@ function ThisOrThat({ items }: { items: WardrobeItem[] }) {
         <div>
           <div className="font-display text-xl leading-none">This or That</div>
           <div className="text-[10px] uppercase tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>
-            Training your style fingerprint
+            Training Aria&apos;s style read of you
           </div>
         </div>
-        {choices > 0 && (
-          <div className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>
-            {choices} choice{choices !== 1 ? "s" : ""}
-          </div>
-        )}
+        {saving && <Loader2 size={12} className="spin" style={{ color: "var(--text-dim)" }} />}
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex gap-2 px-5 pt-4">
+        <button className={`chip ${mode === "items" ? "chip-active" : ""}`} onClick={() => setMode("items")}>
+          My items
+        </button>
+        <button className={`chip ${mode === "styles" ? "chip-active" : ""}`} onClick={() => setMode("styles")}>
+          Style archetypes
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 flex flex-col items-center gap-4">
-        <p className="text-sm text-center" style={{ color: "var(--text-muted)" }}>
-          Which fits your vibe more?
-        </p>
-
-        <div className="relative grid grid-cols-2 gap-4 w-full max-w-sm">
-          {[pair.a, pair.b].map((item) => (
-            <motion.button
-              key={item.id}
-              whileHover={{ y: -4 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => pick(item)}
-              className="surface text-left"
-              style={{ padding: 0, cursor: "pointer", border: "1px solid var(--border)", background: "var(--surface)" }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.cutout_url || item.image_url}
-                alt={item.name}
-                className="w-full object-cover"
-                style={{ aspectRatio: "3/4", display: "block" }}
-              />
-              <div className="p-2">
-                <div className="text-xs font-mono truncate" style={{ color: "var(--text)" }}>{item.name}</div>
-                <div className="text-[10px] capitalize mt-0.5" style={{ color: "var(--text-dim)" }}>{item.category}</div>
-              </div>
-            </motion.button>
-          ))}
-          {/* "or" divider floats between the two cards */}
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              top: "calc(50% - 14px)",
-              left: "calc(50% - 13px)",
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              padding: "2px 7px",
-              zIndex: 2,
-            }}
-          >
-            <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>or</span>
-          </div>
-        </div>
-
         <AnimatePresence>
-          {lastPick && (
-            <motion.div
-              key={choices}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="text-xs text-center"
-              style={{ color: "var(--text-dim)" }}
-            >
-              {choices < 3
-                ? `Noted — "${lastPick}" matches your vibe.`
-                : choices < 6
-                  ? `Style fingerprint developing (${choices} data points)`
-                  : `Aria now has strong insight into your aesthetic ✓`
-              }
-            </motion.div>
-          )}
+          <motion.p
+            key={feedbackLine}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="text-xs text-center"
+            style={{ color: choices > 0 ? "var(--gold)" : "var(--text-muted)" }}
+          >
+            {feedbackLine}
+          </motion.p>
         </AnimatePresence>
+
+        {mode === "items" && (() => {
+          const pair = pairs[pairIdx % pairs.length];
+          return (
+            <ItemPair
+              a={pair.a} b={pair.b}
+              onPick={(chosen) => pickItem(chosen, chosen.id === pair.a.id ? pair.b : pair.a)}
+            />
+          );
+        })()}
+
+        {mode === "styles" && (
+          loadingStyle || !stylePair ? (
+            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--text-dim)" }}>
+              <Loader2 size={14} className="spin" /> Loading styles…
+            </div>
+          ) : (
+            <StyleArchetypePair
+              a={stylePair.item_a} b={stylePair.item_b}
+              onPick={(chosen) => {
+                const other = chosen.id === stylePair!.item_a.id ? stylePair!.item_b : stylePair!.item_a;
+                pickStyle(chosen, other);
+              }}
+            />
+          )
+        )}
 
         {choices >= 3 && (
           <button
             className="btn-secondary"
-            style={{ fontSize: "0.8rem", padding: "0.5rem 1rem" }}
-            onClick={() => {
-              setPairIdx(0);
-              setLastPick(null);
-            }}
+            style={{ fontSize: "0.8rem", padding: "0.45rem 1rem" }}
+            onClick={() => { if (mode === "items") { setPairIdx(0); setLastPick(null); } else fetchStylePair(); }}
           >
-            <Shuffle size={13} /> Reshuffle
+            <Shuffle size={13} /> Next pair
           </button>
         )}
+
+        {choices >= 3 && (
+          <div
+            className="text-[10px] text-center max-w-xs"
+            style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border)", paddingTop: 12 }}
+          >
+            Switch to Text Chat and ask Aria for an outfit — she now knows your aesthetic from these choices.
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ItemPair({ a, b, onPick }: { a: WardrobeItem; b: WardrobeItem; onPick: (item: WardrobeItem) => void }) {
+  return (
+    <div className="relative grid grid-cols-2 gap-4 w-full max-w-sm">
+      {[a, b].map((item) => (
+        <motion.button
+          key={item.id}
+          whileHover={{ y: -4 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => onPick(item)}
+          className="surface text-left"
+          style={{ padding: 0, cursor: "pointer", border: "1px solid var(--border)" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.cutout_url || item.image_url}
+            alt={item.name}
+            className="w-full object-cover"
+            style={{ aspectRatio: "3/4", display: "block" }}
+          />
+          <div className="p-2">
+            <div className="text-xs font-mono truncate" style={{ color: "var(--text)" }}>{item.name}</div>
+            <div className="text-[10px] capitalize mt-0.5" style={{ color: "var(--text-dim)" }}>{item.category}</div>
+          </div>
+        </motion.button>
+      ))}
+      <OrDivider />
+    </div>
+  );
+}
+
+function StyleArchetypePair({ a, b, onPick }: { a: StyleCard; b: StyleCard; onPick: (card: StyleCard) => void }) {
+  return (
+    <div className="relative grid grid-cols-2 gap-4 w-full max-w-sm">
+      {[a, b].map((card) => (
+        <motion.button
+          key={card.id}
+          whileHover={{ y: -4 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => onPick(card)}
+          className="surface text-left flex flex-col"
+          style={{ padding: 0, cursor: "pointer", border: "1px solid var(--border)", minHeight: 160 }}
+        >
+          <div
+            className="w-full flex items-center justify-center flex-1 p-4"
+            style={{ background: "var(--surface2)", aspectRatio: "1/1" }}
+          >
+            <span className="font-display text-center leading-tight" style={{ fontSize: "1rem", color: "var(--text)" }}>
+              {card.name}
+            </span>
+          </div>
+          {card.description && (
+            <div className="p-2">
+              <div className="text-[9px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+                {card.description}
+              </div>
+            </div>
+          )}
+        </motion.button>
+      ))}
+      <OrDivider />
+    </div>
+  );
+}
+
+function OrDivider() {
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        top: "calc(50% - 14px)",
+        left: "calc(50% - 13px)",
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        padding: "2px 7px",
+        zIndex: 2,
+      }}
+    >
+      <span className="text-xs font-mono" style={{ color: "var(--text-dim)" }}>or</span>
     </div>
   );
 }

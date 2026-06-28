@@ -298,13 +298,14 @@ def get_tryon(tryon_id: str) -> Optional[dict]:
     return db.query("SELECT * FROM try_on_results WHERE id = :id", {"id": tryon_id}, fetch="one")
 
 
-def get_recent_tryons(user_id: str, limit: int = 12) -> list:
-    # Only saved try-ons appear in history/dashboard; raw generations stay hidden
-    # until the user explicitly saves them.
+def get_recent_tryons(user_id: str, limit: int = 12, saved_only: bool = True) -> list:
+    # saved_only=True (default): only explicitly saved try-ons (history/dashboard).
+    # saved_only=False: all recent generations (used by the chat share tray).
+    saved_clause = " AND saved = TRUE" if saved_only else ""
     return db.query(
-        """
+        f"""
         SELECT * FROM try_on_results
-        WHERE user_id = :user_id AND saved = TRUE
+        WHERE user_id = :user_id{saved_clause}
         ORDER BY created_at DESC
         LIMIT :limit
         """,

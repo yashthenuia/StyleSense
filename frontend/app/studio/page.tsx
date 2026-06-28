@@ -179,6 +179,18 @@ export default function StudioPage() {
   const selectedItems = items.filter((i) => selectedItemIds.includes(i.id));
   const effectiveSelfieUrl = activeFaceUrl || avatarSelfieUrl;
 
+  const CAT_ORDER = ["tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"];
+  const groupedItems = items.reduce<Record<string, WardrobeItem[]>>((acc, it) => {
+    const cat = (it.category || "other").toLowerCase();
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(it);
+    return acc;
+  }, {});
+  const sortedCategories = [
+    ...CAT_ORDER.filter((c) => groupedItems[c]?.length),
+    ...Object.keys(groupedItems).filter((c) => !CAT_ORDER.includes(c) && groupedItems[c]?.length),
+  ];
+
   // Category-aware selection: one item per outfit "slot" (top, bottom, outerwear,
   // shoes). A dress is mutually exclusive with tops + bottoms. Accessories stack.
   function selectItem(item: WardrobeItem) {
@@ -305,25 +317,20 @@ export default function StudioPage() {
       <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
       <div className="lg:h-full flex flex-col lg:grid lg:grid-cols-12 gap-6">
         <div className="lg:col-span-3">
-          <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-2 lg:overflow-y-auto lg:overflow-x-visible lg:max-h-[600px] lg:pr-1 lg:pb-0">
+          {/* Mobile: flat horizontal scroll */}
+          <div className="flex gap-2 overflow-x-auto pb-2 lg:hidden">
             {items.map((it) => {
               const sel = selectedItemIds.includes(it.id);
               return (
                 <button
                   key={it.id}
                   onClick={() => selectItem(it)}
-                  className="surface overflow-hidden relative flex-shrink-0 w-20 h-20 lg:w-auto lg:h-auto lg:flex-shrink"
+                  className="surface overflow-hidden relative flex-shrink-0 w-20 h-20"
                   style={{ padding: 0, cursor: "pointer", background: "#fff", borderColor: sel ? "var(--ink)" : "var(--border)" }}
                   title={it.name}
                 >
                   <div className="relative w-full aspect-square">
-                    <Image
-                      src={it.image_url}
-                      alt={it.name}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 1024px) 80px, 120px"
-                    />
+                    <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="80px" />
                   </div>
                   {sel && (
                     <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
@@ -334,6 +341,44 @@ export default function StudioPage() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Desktop: grouped by category with section headers */}
+          <div className="hidden lg:flex lg:flex-col gap-3 overflow-y-auto max-h-[600px] pr-1">
+            {sortedCategories.map((cat) => (
+              <div key={cat}>
+                <div
+                  className="text-[9px] font-mono uppercase tracking-widest mb-1.5 px-0.5"
+                  style={{ color: "var(--text-dim)" }}
+                >
+                  {cat}
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {groupedItems[cat].map((it) => {
+                    const sel = selectedItemIds.includes(it.id);
+                    return (
+                      <button
+                        key={it.id}
+                        onClick={() => selectItem(it)}
+                        className="surface overflow-hidden relative"
+                        style={{ padding: 0, cursor: "pointer", background: "#fff", borderColor: sel ? "var(--ink)" : "var(--border)" }}
+                        title={it.name}
+                      >
+                        <div className="relative w-full aspect-square">
+                          <Image src={it.image_url} alt={it.name} fill className="object-cover" sizes="120px" />
+                        </div>
+                        {sel && (
+                          <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                               style={{ background: "var(--ink)", color: "var(--parchment)" }}>
+                            {selectedItemIds.indexOf(it.id) + 1}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -378,8 +423,8 @@ export default function StudioPage() {
                     <img
                       src={stylizedAvatarUrl || effectiveSelfieUrl!}
                       alt="Your starting point"
-                      className="w-full h-full object-cover"
-                      style={{ filter: stylizedAvatarUrl ? "brightness(0.7)" : "brightness(0.55) saturate(0.9)" }}
+                      className="w-full h-full object-contain"
+                      style={{ filter: stylizedAvatarUrl ? "brightness(0.7)" : "brightness(0.6) saturate(0.9)" }}
                     />
                     <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 px-4 text-center">
                       {stylizedAvatarStatus === "generating" && (
@@ -417,20 +462,22 @@ export default function StudioPage() {
                       )}
                     </div>
                   </>
-                ) : (
+                ) : selfiesLoaded ? (
                   <div className="flex items-center justify-center h-full text-center px-4" style={{ color: "var(--text-dim)" }}>
                     <div>
                       <UserIcon size={28} className="mx-auto mb-2" />
                       <div className="text-sm">Upload a selfie in <Link href="/onboarding" style={{ color: "var(--gold)" }}>Avatar Setup</Link> to get started</div>
                     </div>
                   </div>
+                ) : (
+                  <div className="w-full h-full shimmer" />
                 )}
                 </div>
               </div>
           )}
 
-          {/* N2 — Previous try-ons strip */}
-          {recentTryOns.length > 0 && !generating && (
+          {/* N2 — Previous try-ons strip (idle only — hidden when result is showing) */}
+          {recentTryOns.length > 0 && !generating && !resultUrl && (
             <div className="surface p-3 mt-3">
               <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
                 Previous try-ons · click to view

@@ -120,8 +120,8 @@ export default function ActivityPage() {
                       <StatusIcon status={task.status} />
                       <span>
                         {task.status === "running" && "Running…"}
-                        {task.status === "done" && `Done · ${timeAgo(task.finishedAt!)}`}
-                        {task.status === "error" && `Failed · ${timeAgo(task.finishedAt!)}`}
+                        {task.status === "done" && `Done${task.finishedAt ? ` · ${timeAgo(task.finishedAt)}` : ""}`}
+                        {task.status === "error" && `Failed${task.finishedAt ? ` · ${timeAgo(task.finishedAt)}` : ""}`}
                       </span>
                     </div>
                     {task.status === "error" && task.error && (

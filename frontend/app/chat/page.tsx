@@ -423,7 +423,7 @@ function ShareTray({ otherId, onShared }: { otherId: string; onShared: () => voi
   useEffect(() => {
     Promise.all([
       apiGet<typeof outfits>("/api/outfits").catch(() => []),
-      apiGet<typeof tryons>("/api/tryon/recent?limit=12").catch(() => []),
+      apiGet<typeof tryons>("/api/tryon/recent?limit=20&all=true").catch(() => []),
     ]).then(([o, t]) => {
       setOutfits(o);
       setTryons(t);

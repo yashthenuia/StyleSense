@@ -38,7 +38,7 @@ export default function OutfitsPage() {
       // Only hijack when there's no significant horizontal intent already
       if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
         e.preventDefault();
-        rail.scrollLeft += e.deltaY;
+        rail.scrollLeft += e.deltaY * 0.55;
       }
     }
     rail.addEventListener("wheel", onWheel, { passive: false });
@@ -63,12 +63,6 @@ export default function OutfitsPage() {
     <div className="h-full flex flex-col gap-4">
       <div className="flex items-end justify-between flex-shrink-0">
         <div>
-          <div
-            className="text-xs mb-2"
-            style={{ color: "var(--gold)", letterSpacing: "0.18em", textTransform: "uppercase" }}
-          >
-            Outfits
-          </div>
           <h1 className="font-display text-5xl leading-tight">Saved Looks</h1>
         </div>
         <Link
@@ -188,15 +182,27 @@ export default function OutfitsPage() {
                 </button>
 
                 {/* Footer */}
-                <div className="pt-2 px-0.5">
-                  <div className="font-display text-base leading-tight truncate">{o.name}</div>
-                  <div className="flex items-center gap-1.5 text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
-                    <span>{o.item_ids.length} items</span>
-                    {o.occasion && <><span>·</span><span className="truncate">{o.occasion}</span></>}
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
-                    <Calendar size={8} />
-                    {new Date(o.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                <div className="pt-1.5 px-0.5">
+                  <div className="font-display text-sm leading-tight truncate">{o.name}</div>
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span
+                      className="font-mono text-[9px] px-1.5 py-0.5"
+                      style={{ background: "var(--ink)", color: "var(--bg)" }}
+                    >
+                      {o.item_ids.length} items
+                    </span>
+                    {o.occasion && (
+                      <span
+                        className="font-mono text-[9px] px-1.5 py-0.5 truncate"
+                        style={{ background: "var(--surface3)", color: "var(--text-muted)" }}
+                      >
+                        {o.occasion}
+                      </span>
+                    )}
+                    <span className="font-mono text-[9px] flex items-center gap-0.5" style={{ color: "var(--text-dim)" }}>
+                      <Calendar size={7} />
+                      {new Date(o.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </span>
                   </div>
                 </div>
               </motion.div>

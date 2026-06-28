@@ -262,5 +262,5 @@ async def save_tryon(req: SaveTryOnRequest, user = Depends(current_user)):
 
 
 @router.get("/recent")
-async def recent(limit: int = 12, user = Depends(current_user)):
-    return supabase_service.get_recent_tryons(user["id"], limit)
+async def recent(limit: int = 12, all: bool = False, user = Depends(current_user)):
+    return supabase_service.get_recent_tryons(user["id"], limit, saved_only=not all)

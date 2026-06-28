@@ -120,13 +120,40 @@ async def auto_suggestions(user = Depends(current_user)):
     return {"suggestions": suggestions[:3]}
 
 
+_STYLE_ARCHETYPES = [
+    ("Preppy", "polo shirts, chinos, loafers, pastel sweaters, structured blazers"),
+    ("Old Money Quiet Luxury", "cashmere, neutral linens, tailored trousers, minimal branding"),
+    ("Chic Parisian", "striped tops, trench coats, slim-leg trousers, ballet flats"),
+    ("Coastal Grandmother", "linen sets, woven totes, wide-brimmed hats, earthy neutrals"),
+    ("Dark Academia", "tweed, moody plaids, turtlenecks, leather oxfords, burgundy"),
+    ("Winter Gothic", "black maxi coats, velvet, sheer layers, boots, dark accessories"),
+    ("Winter Cozy Cottagecore", "chunky knits, plaid flannels, cozy boots, warm caramels"),
+    ("Street Luxe", "oversized hoodies, joggers, sneakers, gold accessories, minimal palette"),
+    ("Effortless Atelier", "bias-cut dresses, slouchy blazers, terracotta and sand, understated"),
+    ("Boho Festival", "crochet tops, flowy midi skirts, layered jewelry, earthy fringe"),
+    ("Clean Girl", "sleek bun, fitted basics, gold hoops, white sneakers, neutral tones"),
+    ("Mob Wife Glam", "faux fur, bold prints, heeled boots, statement jewelry, rich tones"),
+]
+
+
 @router.get("/this-or-that")
-async def this_or_that(user = Depends(current_user)):
+async def this_or_that(type: str = "items", user = Depends(current_user)):
+    pair_id = str(uuid.uuid4())
+
+    if type == "styles":
+        a, b = random.sample(_STYLE_ARCHETYPES, 2)
+        return {
+            "pair_id": pair_id,
+            "question_type": "styles",
+            "item_a": {"id": a[0], "name": a[0], "description": a[1]},
+            "item_b": {"id": b[0], "name": b[0], "description": b[1]},
+        }
+
     wardrobe = supabase_service.get_wardrobe_items(user["id"])
     if len(wardrobe) < 2:
         raise HTTPException(400, "Need at least 2 wardrobe items for This or That.")
     pair = random.sample(wardrobe, 2)
-    return {"pair_id": str(uuid.uuid4()), "item_a": pair[0], "item_b": pair[1]}
+    return {"pair_id": pair_id, "question_type": "items", "item_a": pair[0], "item_b": pair[1]}
 
 
 class ThisOrThatChoice(BaseModel):
@@ -134,6 +161,9 @@ class ThisOrThatChoice(BaseModel):
     item_a_id: str
     item_b_id: str
     chosen_id: str
+    question_type: str = "items"  # "items" | "styles"
+    chosen_name: str | None = None  # for archetype choices
+    rejected_name: str | None = None
 
 
 @router.post("/this-or-that")
@@ -142,12 +172,18 @@ async def save_this_or_that(req: ThisOrThatChoice, user = Depends(current_user))
         raise HTTPException(400, "chosen_id must be one of the two item IDs.")
     row = supabase_service.get_user(user["id"]) or {}
     prefs: list = row.get("style_preferences") or []
-    prefs.append({
+    rejected_id = req.item_b_id if req.chosen_id == req.item_a_id else req.item_a_id
+    entry: dict = {
         "pair_id": req.pair_id,
+        "question_type": req.question_type,
         "a_id": req.item_a_id,
         "b_id": req.item_b_id,
         "chosen_id": req.chosen_id,
         "ts": datetime.now(timezone.utc).isoformat(),
-    })
+    }
+    if req.question_type == "styles":
+        entry["chosen_type"] = req.chosen_name or req.chosen_id
+        entry["rejected_type"] = req.rejected_name or rejected_id
+    prefs.append(entry)
     supabase_service.upsert_user(user["id"], style_preferences=prefs[-100:])
     return {"saved": True, "total_preferences": len(prefs)}

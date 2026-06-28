@@ -31,6 +31,7 @@ class AriaState(TypedDict, total=False):
     occasion: Optional[str]
     scene: Optional[str]
     kb_snippets: list
+    style_preferences: list  # from this-or-that choices
     reply: str
     item_ids: list
 
@@ -73,6 +74,9 @@ def _scene_for_occasion(occasion: Optional[str], user_text: str) -> Optional[str
 
 SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist for the user. Warm, specific, honest, concise.
 
+# USER'S REVEALED PREFERENCES (from this-or-that choices — prioritise these when styling)
+{preferences}
+
 # HOW TO RECOMMEND
 - START FROM THE OCCASION and its dress code, then build a COMPLETE outfit appropriate to it
   (top + bottom, or a dress, plus a layer / shoes / one accessory when relevant) - not a single item.
@@ -104,26 +108,32 @@ SYSTEM_TEMPLATE = """You are Aria, StyleSense's personal stylist for the user. W
 
 
 def _ensure_profile(state: AriaState) -> dict:
-    if state.get("color_profile"):
-        return {}
     user = supabase_service.get_user(state["user_id"]) or {}
-    cached = user.get("color_profile")
-    if cached:
-        return {"color_profile": cached}
-    # Derive from the best available photo (full-body preferred, else selfie)
-    selfie = color_service.best_profile_source(user)
-    if not selfie:
-        return {}
-    profile = color_service.analyze_color_profile(selfie)
-    if profile:
-        try:
-            supabase_service.upsert_user(
-                state["user_id"], color_profile=profile, color_profile_source_selfie=selfie
-            )
-        except Exception as e:
-            logger.warning(f"Could not cache color profile: {e}")
-        return {"color_profile": profile}
-    return {}
+    result: dict = {}
+
+    if not state.get("color_profile"):
+        cached = user.get("color_profile")
+        if cached:
+            result["color_profile"] = cached
+        else:
+            selfie = color_service.best_profile_source(user)
+            if selfie:
+                profile = color_service.analyze_color_profile(selfie)
+                if profile:
+                    try:
+                        supabase_service.upsert_user(
+                            state["user_id"], color_profile=profile, color_profile_source_selfie=selfie
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not cache color profile: {e}")
+                    result["color_profile"] = profile
+
+    # Load this-or-that style preferences (last 10)
+    prefs = user.get("style_preferences") or []
+    if prefs:
+        result["style_preferences"] = prefs[-10:]
+
+    return result
 
 
 def _last_user_text(messages: list) -> str:
@@ -148,8 +158,27 @@ def _retrieve_kb(state: AriaState) -> dict:
     return {"kb_snippets": snippets}
 
 
+def _format_preferences(prefs: list, wardrobe: list) -> str:
+    """Translate raw this-or-that records into readable sentences for Aria."""
+    if not prefs:
+        return "(no this-or-that choices yet — recommend based on wardrobe and color profile only)"
+    item_map = {w["id"]: w["name"] for w in (wardrobe or []) if w.get("id") and w.get("name")}
+    lines = []
+    for p in prefs:
+        chosen = p.get("chosen_id", "")
+        rejected = p.get("b_id") if chosen == p.get("a_id") else p.get("a_id")
+        cn = item_map.get(chosen, p.get("chosen_type") or chosen[:8])
+        rn = item_map.get(rejected or "", p.get("rejected_type") or (rejected or "")[:8])
+        if cn and rn:
+            lines.append(f"- Preferred {cn!r} over {rn!r}")
+        elif cn:
+            lines.append(f"- Chose style/archetype: {cn!r}")
+    return "\n".join(lines) if lines else "(no interpretable preferences yet)"
+
+
 def _advise(state: AriaState) -> dict:
     system = SYSTEM_TEMPLATE.format(
+        preferences=_format_preferences(state.get("style_preferences", []), state.get("wardrobe", [])),
         color_profile=color_service.format_color_profile(state.get("color_profile")),
         kb="\n".join(f"- {s}" for s in state.get("kb_snippets", [])) or "(none)",
         wardrobe=anthropic_service._format_wardrobe(state.get("wardrobe", [])),
