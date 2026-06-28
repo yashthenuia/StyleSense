@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Shirt, MessageCircle, Plus, X } from "lucide-react";
+import { useSeenOnce } from "@/lib/useSeenOnce";
 import type { TryOnResult } from "@/types";
 import { HeroVideo } from "@/components/dashboard/HeroVideo";
 import { TryOnCarousel } from "@/components/dashboard/TryOnCarousel";
@@ -21,6 +22,8 @@ export default function DashboardPage() {
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [recent, setRecent] = useState<TryOnResult[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const hintSeen = useSeenOnce("dashboard-welcome");
 
   useEffect(() => {
     if (!user) return;
@@ -47,6 +50,27 @@ export default function DashboardPage() {
           <h1 className="font-display text-3xl md:text-4xl leading-tight">
             Your Digital Runway
           </h1>
+
+          {/* First-run welcome hint */}
+          {!hintSeen && !hintDismissed && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex items-start gap-2 mt-2 max-w-lg"
+            >
+              <p className="flex-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                Add items to your Wardrobe, then head to Studio to try them on your avatar.
+              </p>
+              <button
+                onClick={() => setHintDismissed(true)}
+                aria-label="Dismiss hint"
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-dim)", padding: "2px", flexShrink: 0, lineHeight: 1 }}
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          )}
 
           {/* Stats row — derived from already-fetched data, no extra BE calls */}
           {(items.length > 0 || recent.length > 0) && (
