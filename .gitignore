@@ -24,6 +24,15 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Internal AI session / tool artifacts
+.claude/
+.kilo/
+.superpowers/
+github-project-skill/
+graphify-out/
+temp_architecture.mmd
 
 # Test artifacts
 backend/tests/output/
