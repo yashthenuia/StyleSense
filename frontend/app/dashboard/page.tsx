@@ -25,7 +25,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     apiGet<WardrobeItem[]>(`/api/wardrobe`).then(setItems).catch(() => {});
-    apiGet<TryOnResult[]>(`/api/tryon/recent`).then(r => setRecent(r.slice(0, 10))).catch(() => {});
+    apiGet<TryOnResult[]>(`/api/tryon/recent?all=true`).then(r => setRecent(r.slice(0, 10))).catch(() => {});
   }, [user]);
 
   const archive = Object.values(

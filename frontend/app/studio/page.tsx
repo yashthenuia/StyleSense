@@ -140,7 +140,7 @@ export default function StudioPage() {
   useEffect(() => {
     if (!user) return;
     apiGet<WardrobeItem[]>(`/api/wardrobe`).then(setItems).catch(() => {});
-    apiGet<TryOnResult[]>("/api/tryon/recent").then(r => setRecentTryOns(r.slice(0, 8))).catch(() => {});
+    apiGet<TryOnResult[]>("/api/tryon/recent?all=true").then(r => setRecentTryOns(r.slice(0, 8))).catch(() => {});
     apiGet<{ selfie_urls: string[]; primary_url: string | null }>("/api/avatar/selfies")
       .then((d) => {
         setAllSelfies(d.selfie_urls || []);
@@ -275,13 +275,27 @@ export default function StudioPage() {
 
   async function saveOutfit(name: string) {
     try {
-      await apiPost("/api/outfits/save", {
-        name,
-        item_ids: selectedItemIds,
-        preview_image_url: eventUrl || resultUrl,
-        tryon_result_id: resultId,
-      });
-      toast.success("Saved — it's now in your Outfits & history.");
+      await Promise.all([
+        apiPost("/api/outfits/save", {
+          name,
+          item_ids: selectedItemIds,
+          preview_image_url: eventUrl || resultUrl,
+          tryon_result_id: resultId,
+        }),
+        // Also mark the underlying try-on as saved so it appears in the gallery
+        resultId ? apiPost("/api/tryon/save", { tryon_id: resultId }).catch(() => {}) : Promise.resolve(),
+      ]);
+      toast.success("Saved to Outfits + gallery.");
+    } catch (e) {
+      toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+  }
+
+  async function saveTryOnOnly() {
+    if (!resultId) return;
+    try {
+      await apiPost("/api/tryon/save", { tryon_id: resultId });
+      toast.success("Added to your gallery.");
     } catch (e) {
       toast.error(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
@@ -837,8 +851,11 @@ export default function StudioPage() {
 
           {resultUrl && (
             <div className="surface p-5 space-y-2">
-              <button className="btn-secondary w-full" onClick={() => setShowSaveDialog(true)}>
-                <Save size={14} /> Save {videoUrl ? "look" : "outfit"}
+              <button className="btn-primary w-full" onClick={() => setShowSaveDialog(true)}>
+                <Save size={14} /> Save as outfit
+              </button>
+              <button className="btn-secondary w-full" onClick={saveTryOnOnly} disabled={!resultId}>
+                <Save size={14} /> Save to gallery
               </button>
               <button className="btn-secondary w-full" onClick={() => setShowShare(true)} disabled={!resultId}>
                 <Share2 size={14} /> Share with friend
