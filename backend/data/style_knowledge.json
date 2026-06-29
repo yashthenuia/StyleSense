@@ -1,78 +1,221 @@
 {
   "undertones": {
     "warm": {
-      "keywords": ["warm", "golden", "yellow", "olive", "peach"],
+      "keywords": [
+        "warm",
+        "golden",
+        "yellow",
+        "olive",
+        "peach"
+      ],
       "text": "Warm undertone: skin has golden/yellow/peach warmth; veins look green. Flatter with warm, earthy hues - camel, olive, rust, terracotta, mustard, cream, coral, warm reds, bronze. Gold jewelry beats silver. Avoid icy/cool pastels and stark pure white (choose ivory/cream instead)."
     },
     "cool": {
-      "keywords": ["cool", "pink", "blue", "rosy", "bluish"],
+      "keywords": [
+        "cool",
+        "pink",
+        "blue",
+        "rosy",
+        "bluish"
+      ],
       "text": "Cool undertone: skin has pink/blue/rosy tones; veins look blue/purple. Flatter with cool, clear hues - navy, emerald, sapphire, jewel tones, true red, cool pinks, lavender, charcoal, pure white. Silver jewelry beats gold. Avoid muddy oranges and warm yellows."
     },
     "neutral": {
-      "keywords": ["neutral", "balanced", "mixed"],
+      "keywords": [
+        "neutral",
+        "balanced",
+        "mixed"
+      ],
       "text": "Neutral undertone: a balance of warm and cool; veins look blue-green. Most colors work - lean on soft, slightly muted versions. Great with jade, teal, dusty rose, taupe, denim blue, soft white. Both gold and silver work. Avoid only the most extreme neon/clashing shades."
     }
   },
   "seasons": {
     "spring": {
-      "keywords": ["spring", "light warm", "bright warm"],
+      "keywords": [
+        "spring",
+        "light warm",
+        "bright warm"
+      ],
       "text": "Spring (warm + light + bright): warm, clear, light colors - coral, peach, golden yellow, warm green, camel, ivory, bright aqua. Keep contrast low-to-medium and colors fresh, not muted."
     },
     "summer": {
-      "keywords": ["summer", "light cool", "soft cool"],
+      "keywords": [
+        "summer",
+        "light cool",
+        "soft cool"
+      ],
       "text": "Summer (cool + light + soft): soft, cool, muted colors - powder blue, dusty rose, lavender, soft navy, mauve, cool grey, soft white. Avoid heavy black and harsh brights."
     },
     "autumn": {
-      "keywords": ["autumn", "fall", "warm deep", "warm muted"],
+      "keywords": [
+        "autumn",
+        "fall",
+        "warm deep",
+        "warm muted"
+      ],
       "text": "Autumn (warm + deep + muted): rich, warm, earthy colors - rust, olive, mustard, terracotta, forest green, camel, cream, bronze, deep teal. Avoid icy pastels and pure white/black."
     },
     "winter": {
-      "keywords": ["winter", "cool deep", "high contrast", "bright cool"],
+      "keywords": [
+        "winter",
+        "cool deep",
+        "high contrast",
+        "bright cool"
+      ],
       "text": "Winter (cool + deep + bright): bold, cool, high-contrast colors - true black, pure white, royal blue, emerald, ruby, magenta, icy pastels. Carries jewel tones and stark contrast well. Avoid muted, dusty, earthy tones."
     }
   },
   "occasions": {
     "beach wedding": {
-      "keywords": ["beach", "wedding", "seaside", "coastal", "destination"],
+      "keywords": [
+        "beach",
+        "wedding",
+        "seaside",
+        "coastal",
+        "destination"
+      ],
       "text": "Beach wedding: light, breathable fabrics (linen, chiffon), flowing silhouettes, soft/airy palette (pastels, sand, sky blue, coral). Flat or block-heel sandals (no stilettos in sand). Avoid heavy formal black-tie and stiff suits."
     },
     "formal": {
-      "keywords": ["formal", "black tie", "gala", "ceremony", "wedding guest"],
+      "keywords": [
+        "formal",
+        "black tie",
+        "gala",
+        "ceremony",
+        "wedding guest"
+      ],
       "text": "Formal / black-tie: floor-length or elegant midi dresses, tailored suits, refined fabrics (silk, satin, wool). Deeper, richer colors; minimal but polished accessories. Elevated footwear."
     },
     "cocktail": {
-      "keywords": ["cocktail", "party", "evening", "dinner", "date night", "club"],
+      "keywords": [
+        "cocktail",
+        "party",
+        "evening",
+        "dinner",
+        "date night",
+        "club"
+      ],
       "text": "Cocktail / evening: knee-to-midi dresses or smart separates, a statement piece, heels or dressy flats. Jewel tones, metallics, or classic black read well at night."
     },
     "interview": {
-      "keywords": ["interview", "office", "work", "business", "professional", "meeting"],
+      "keywords": [
+        "interview",
+        "office",
+        "work",
+        "business",
+        "professional",
+        "meeting"
+      ],
       "text": "Interview / business: tailored, conservative pieces - blazer, structured trousers or pencil skirt, crisp shirt. Neutral, low-contrast palette (navy, grey, charcoal, white). Minimal accessories; clean closed-toe shoes."
     },
     "casual": {
-      "keywords": ["casual", "brunch", "everyday", "weekend", "coffee", "errands"],
+      "keywords": [
+        "casual",
+        "brunch",
+        "everyday",
+        "weekend",
+        "coffee",
+        "errands"
+      ],
       "text": "Casual / daytime: comfortable, relaxed fits - well-fitting jeans, knits, tees, sneakers or loafers. Mix a neutral base with one color pop. Keep it effortless and unfussy."
     },
     "sport": {
-      "keywords": ["sport", "gym", "active", "athleisure", "workout", "hike"],
+      "keywords": [
+        "sport",
+        "gym",
+        "active",
+        "athleisure",
+        "workout",
+        "hike"
+      ],
       "text": "Sport / active: performance fabrics, fitted activewear, supportive footwear. Functional layering. Bright or tonal athletic palettes both work."
     }
   },
   "pairing_rules": [
     {
-      "keywords": ["neutral", "base", "match", "combine", "pair"],
+      "keywords": [
+        "neutral",
+        "base",
+        "match",
+        "combine",
+        "pair"
+      ],
       "text": "Build around a neutral base (black, white, navy, grey, beige, denim) and add one or two accent colors. Neutrals pair with almost anything."
     },
     {
-      "keywords": ["complementary", "contrast", "pop", "bold"],
+      "keywords": [
+        "complementary",
+        "contrast",
+        "pop",
+        "bold"
+      ],
       "text": "Complementary pairs (opposites) create energy: blue+orange, purple+yellow, green+red. Use one as the dominant and the other as a small accent."
     },
     {
-      "keywords": ["monochrome", "tonal", "same color"],
+      "keywords": [
+        "monochrome",
+        "tonal",
+        "same color"
+      ],
       "text": "Tonal/monochrome looks (shades of one color) are elegant and elongating - vary the textures so it does not look flat."
     },
     {
-      "keywords": ["pattern", "print", "mixing"],
+      "keywords": [
+        "pattern",
+        "print",
+        "mixing"
+      ],
       "text": "When mixing patterns, vary the scale (one large, one small) and keep a shared color between them. Otherwise pair a pattern with solids."
     }
-  ]
+  ],
+  "body_types": {
+    "rectangle": {
+      "keywords": [
+        "rectangle",
+        "straight",
+        "athletic",
+        "balanced top and bottom"
+      ],
+      "text": "Rectangle (shoulders, waist and hips are similar, little waist definition): create curves and a waistline. Belts, peplums, wrap and fit-and-flare styles, tucked-in tops, and color-blocking with a darker waist carve an hourglass illusion. Add volume with structured shoulders, layers and fuller skirts.",
+      "source": "the concept wardrobe (theconceptwardrobe.com/build-a-wardrobe)"
+    },
+    "hourglass": {
+      "keywords": [
+        "hourglass",
+        "curvy",
+        "defined waist"
+      ],
+      "text": "Hourglass (shoulders ~ hips with a clearly defined waist): follow the natural silhouette and emphasize the waist. Fitted/tailored, waist-defining pieces - wrap dresses, high-waisted bottoms, belted coats, V-necks. Avoid boxy, shapeless or stiff volume that hides the waist.",
+      "source": "the concept wardrobe (theconceptwardrobe.com/build-a-wardrobe)"
+    },
+    "pear": {
+      "keywords": [
+        "pear",
+        "triangle",
+        "wider hips",
+        "bottom heavy"
+      ],
+      "text": "Pear / Triangle (hips wider than shoulders): balance by adding interest up top and skimming the lower half. Statement or boat/portrait necklines, structured shoulders, lighter or brighter tops; darker, simple straight/bootcut bottoms and A-line skirts. Draw the eye upward.",
+      "source": "the concept wardrobe (theconceptwardrobe.com/build-a-wardrobe)"
+    },
+    "inverted_triangle": {
+      "keywords": [
+        "inverted triangle",
+        "broad shoulders",
+        "top heavy"
+      ],
+      "text": "Inverted triangle (shoulders/bust wider than hips): soften the upper body and add volume below. Simple V/scoop necklines and minimal shoulder detail up top; full or A-line skirts, wide-leg or printed bottoms, patch pockets to build the lower half. Balance the frame.",
+      "source": "the concept wardrobe (theconceptwardrobe.com/build-a-wardrobe)"
+    },
+    "apple": {
+      "keywords": [
+        "apple",
+        "oval",
+        "midsection",
+        "fuller middle"
+      ],
+      "text": "Apple / Oval (fuller midsection, often slimmer legs): elongate and define a higher waistline while skimming the middle. Empire waists, straight or A-line cuts, V-necks and vertical lines, structured open jackets; show the legs with tailored/slim bottoms. Avoid clingy waistbands.",
+      "source": "the concept wardrobe (theconceptwardrobe.com/build-a-wardrobe)"
+    }
+  }
 }

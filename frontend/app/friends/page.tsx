@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import Link from "next/link";
 import {
   Search, UserPlus, Check, X, Users, Loader2, Copy, MessagesSquare,
 } from "lucide-react";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/components/AuthProvider";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
@@ -115,20 +115,18 @@ export default function FriendsPage() {
     <div className="h-full flex flex-col">
       <div className="shrink-0">
         <PageHeader
-          eyebrow="Connect"
           tutorialKey="friends"
           subtitle="Search by email, username, or share code. Once you're friends you can DM and share outfits."
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
       {/* Your share code card */}
       <div
         className="surface p-5 mb-6 flex items-center justify-between"
-        style={{ borderColor: "var(--border-gold)", background: "var(--gold-dim)" }}
       >
         <div>
-          <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--gold)" }}>
+          <div className="text-xs uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
             Your share code
           </div>
           <div className="font-mono text-2xl" style={{ color: "var(--text)", letterSpacing: "0.15em" }}>
@@ -268,7 +266,7 @@ function Section({ title, count, eyebrow, children }: {
       <div className="flex items-end justify-between mb-3">
         <div>
           {eyebrow && (
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--gold)" }}>
+            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
               {eyebrow}
             </div>
           )}
@@ -291,7 +289,7 @@ function SearchResultRow({ r, onSend }: { r: SearchResult; onSend: () => void })
         <div className="text-sm font-medium truncate">{r.full_name || r.email}</div>
         <div className="text-xs" style={{ color: "var(--text-muted)" }}>
           {r.email && <span>{r.email}</span>}
-          {r.share_code && <span style={{ marginLeft: 8 }}>· code <span className="font-mono" style={{ color: "var(--gold)" }}>{r.share_code}</span></span>}
+          {r.share_code && <span style={{ marginLeft: 8 }}>· code <span className="font-mono" style={{ color: "var(--text)" }}>{r.share_code}</span></span>}
         </div>
       </div>
       {r.relationship === "friend" ? (
@@ -323,7 +321,7 @@ function FriendRow({ friend, actions }: { friend: FriendRow; actions: React.Reac
         <div className="text-xs" style={{ color: "var(--text-muted)" }}>
           {friend.other.email}
           {friend.other.share_code && (
-            <span style={{ marginLeft: 8 }}>· code <span className="font-mono" style={{ color: "var(--gold)" }}>{friend.other.share_code}</span></span>
+            <span style={{ marginLeft: 8 }}>· code <span className="font-mono" style={{ color: "var(--text)" }}>{friend.other.share_code}</span></span>
           )}
         </div>
       </div>
@@ -339,9 +337,9 @@ function Avatar({ name }: { name: string }) {
       className="rounded-full flex items-center justify-center font-semibold text-sm"
       style={{
         width: 38, height: 38,
-        background: "var(--gold-dim)",
-        color: "var(--gold)",
-        border: "1px solid var(--border-gold)",
+        background: "var(--surface3)",
+        color: "var(--text-muted)",
+        border: "1px solid var(--border)",
         flexShrink: 0,
       }}
     >

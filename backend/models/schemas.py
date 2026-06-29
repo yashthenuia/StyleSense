@@ -88,6 +88,10 @@ class DetectItemsResponse(BaseModel):
     detected: List[DetectedItem]
 
 
+class DetectFromUrlRequest(BaseModel):
+    image_url: str
+
+
 class AddMultiRequest(BaseModel):
     source_image_url: str
     items: List[DetectedItem]
@@ -146,11 +150,14 @@ class ChatMessage(BaseModel):
 
 class StylistChatRequest(BaseModel):
     messages: List[ChatMessage]
+    image_url: Optional[str] = None
 
 
 class StylistChatResponse(BaseModel):
     reply: str
     suggested_item_ids: List[str] = []
+    occasion: Optional[str] = None
+    scene: Optional[str] = None  # try-on background for "Manifest this look"
 
 
 # ─────────────────────────── FRIENDS / CHAT ─────────────────────────── #

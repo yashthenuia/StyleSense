@@ -24,6 +24,19 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Internal AI session / tool artifacts
+.claude/
+.kilo/
+.superpowers/
+.agents/
+.remember/
+.playwright-mcp/
+skills-lock.json
+github-project-skill/
+graphify-out/
+temp_architecture.mmd
 
 # Test artifacts
 backend/tests/output/
@@ -33,3 +46,8 @@ backend/tests/output/
 backend/start_backend.ps1
 backend/test_startup.py
 frontend/start_frontend.ps1
+
+# transient diagnostic image dirs
+backend/_cutout_test/
+backend/_diag/
+backend/_verify/

@@ -8,6 +8,7 @@ export interface WardrobeItem {
   brand?: string | null;
   tags: string[];
   image_url: string;
+  cutout_url?: string | null;
   source_url?: string | null;
   created_at: string;
 }
@@ -41,6 +42,12 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   suggestedItemIds?: string[];
+  scene?: string | null;      // try-on background for "Manifest this look"
+  manifesting?: boolean;      // an inline try-on is generating
+  manifestUrl?: string;       // the generated look, shown inline in the bubble
+  photoUrl?: string;          // user-uploaded photo shown in their chat bubble
+  manifestId?: string;        // the try-on result id (to save it as an outfit)
+  savedOutfit?: boolean;      // this manifested look was saved to Outfits
 }
 
 export interface DetectedItem {

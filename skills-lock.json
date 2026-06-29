@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "skills": {
+    "3d-animation-creator": {
+      "source": "Prestonigo/Claude-Skills",
+      "sourceType": "github",
+      "skillPath": "3D-Animation-Creator/SKILL.md",
+      "computedHash": "47013733849ddae1108faac9fd809adde963343e83c0099dcc681f2dd8eb4ba7"
+    },
+    "account-settings": {
+      "source": "thedaviddias/ux-patterns-for-developers",
+      "sourceType": "github",
+      "skillPath": "skills/account-settings/SKILL.md",
+      "computedHash": "372fcafa0a405fc1899c66d0977c08602e0aba0ab37c91e9c4c65fb2f0c18198"
+    },
+    "breadcrumb-navigation": {
+      "source": "thedaviddias/Front-End-Checklist",
+      "sourceType": "github",
+      "skillPath": "skills/breadcrumb-navigation/SKILL.md",
+      "computedHash": "4259660efa24a3a3a926221f7abf1f52f89b7af7d645df39fb596f5d7d3457ab"
+    },
+    "design-taste-frontend": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/taste-skill/SKILL.md",
+      "computedHash": "899b84384f74f540ea5284d9b2e9234e050998b42eacc805410b518d4226c0b3"
+    },
+    "duplicate-description": {
+      "source": "thedaviddias/Front-End-Checklist",
+      "sourceType": "github",
+      "skillPath": "skills/duplicate-description/SKILL.md",
+      "computedHash": "b620a8d4f8fac4b98f1718de95753ce90eb6bfc1d63fcf591bcee95d75e554bc"
+    },
+    "find-skills": {
+      "source": "thedaviddias/agent-forge",
+      "sourceType": "github",
+      "skillPath": "global/skills/find-skills/SKILL.md",
+      "computedHash": "adb5cef76c1073378383f95b797ad8cc608909420991ced34b3d2bf330d6b3c8"
+    },
+    "scroll-experience": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scroll-experience/SKILL.md",
+      "computedHash": "aec5ceb7847b4833989da279f21a1743e41086a7e47398f54e9996efb3ed8c99"
+    },
+    "scrolljacking": {
+      "source": "thedaviddias/Front-End-Checklist",
+      "sourceType": "github",
+      "skillPath": "skills/scrolljacking/SKILL.md",
+      "computedHash": "f024d6fc9581d80fb2202f3415c4bff790856693717a02480cfc1bb505c146d6"
+    },
+    "testing-python": {
+      "source": "PrefectHQ/fastmcp",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/python-tests/SKILL.md",
+      "computedHash": "fb420687dfeaad79e3cd36b71549c1c240d25564dd32ea61fa6809a355f4bc3b"
+    }
+  }
+}

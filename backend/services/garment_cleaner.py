@@ -16,33 +16,83 @@ Subsequent calls are fast (~2-3s on CPU).
 """
 import io
 import logging
-from typing import Literal
+from typing import Literal, Optional
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Lazy-load rembg session (heavy import + model download)
-_rembg_session = None
+# Lazy-loaded rembg sessions, cached per model (heavy import + one-time model download).
+_rembg_sessions: dict = {}
+
+# u2net_cloth_seg is trained on garments (upper/lower/full body) and is far better for
+# clothing, but it erases NON-clothing entirely (jewelry, bags, sunglasses, shoes come
+# out blank). So accessories/shoes use a general-purpose object segmenter instead.
+_CLOTHING_CATEGORIES = {"tops", "bottoms", "dresses", "outerwear"}
+_CLOTH_MODEL = "u2net_cloth_seg"
+_GENERAL_MODEL = "isnet-general-use"
 
 
-def _get_rembg_session(model_name: str = "u2net_cloth_seg"):
-    """
-    Default model: u2net_cloth_seg — trained specifically on clothing
-    (segments upper body / lower body / full body garments). Much better than
-    general-purpose models for fashion photos where hands/face/background
-    might otherwise win the "main subject" vote.
-
-    Other options if needed:
-      - 'isnet-general-use'   general object segmentation
-      - 'birefnet-general'    higher quality general (slower)
-      - 'u2net_human_seg'     keeps the entire person (including clothes + body)
-    """
-    global _rembg_session
-    if _rembg_session is None:
+def _get_rembg_session(model_name: str = _CLOTH_MODEL):
+    """Return a cached rembg session for the given model (one per model)."""
+    if model_name not in _rembg_sessions:
         from rembg import new_session
-        _rembg_session = new_session(model_name=model_name)
+        _rembg_sessions[model_name] = new_session(model_name=model_name)
         logger.info(f"rembg session initialized (model={model_name})")
-    return _rembg_session
+    return _rembg_sessions[model_name]
+
+
+def _model_for_category(category: Optional[str]) -> str:
+    return _CLOTH_MODEL if (category or "").lower() in _CLOTHING_CATEGORIES else _GENERAL_MODEL
+
+
+def _opaque_ratio(rgba: Image.Image) -> float:
+    """Fraction of pixels with meaningful alpha (>20)."""
+    alpha = rgba.getchannel("A")
+    hist = alpha.histogram()  # 256 buckets
+    visible = sum(hist[21:])
+    total = rgba.width * rgba.height
+    return visible / total if total else 0.0
+
+
+_MIN_OPAQUE = 0.003  # below this the cutout is essentially blank
+
+
+def _cutout_with_model(image_bytes: bytes, model: str):
+    """Run one rembg model; return (cropped RGBA, opaque_ratio) or (None, 0.0)."""
+    from rembg import remove
+    session = _get_rembg_session(model)
+    rgba = Image.open(io.BytesIO(remove(image_bytes, session=session))).convert("RGBA")
+    bbox = rgba.getbbox()
+    if bbox:
+        rgba = rgba.crop(bbox)
+    return rgba, _opaque_ratio(rgba)
+
+
+def make_cutout(image_bytes: bytes, category: Optional[str] = None) -> bytes | None:
+    """
+    Produce a TRANSPARENT PNG cutout for the closet display (NOT for try-on - try-on
+    keeps using the white-bg image). Picks the clothing model for garments and a
+    general object segmenter for accessories/shoes; if the primary model returns a
+    near-empty result, retries with the other model. Returns PNG bytes, or None on
+    failure / empty cutout (so the UI falls back to the white-bg image).
+    """
+    primary = _model_for_category(category)
+    fallback = _GENERAL_MODEL if primary == _CLOTH_MODEL else _CLOTH_MODEL
+    try:
+        rgba, ratio = _cutout_with_model(image_bytes, primary)
+        if ratio < _MIN_OPAQUE:
+            alt, alt_ratio = _cutout_with_model(image_bytes, fallback)
+            if alt_ratio > ratio:
+                rgba, ratio = alt, alt_ratio
+        if ratio < _MIN_OPAQUE:
+            logger.warning(f"make_cutout: near-empty cutout (category={category}); skipping")
+            return None
+        out = io.BytesIO()
+        rgba.save(out, format="PNG")
+        return out.getvalue()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"make_cutout failed: {type(e).__name__}: {e}")
+        return None
 
 
 CleanMethod = Literal["runway", "rembg", "original", "skipped"]
@@ -110,6 +160,20 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
         logger.warning(f"Runway service unavailable: {e}")
         return None
 
+    # gen4 rejects reference images whose width/height ratio is outside [0.5, 2.0]
+    # (tall phone photos). Pad the reference into range, else the isolate/clean 400s
+    # and every multi-item add fails. Best-effort - fall back to the original on error.
+    try:
+        from services import image_service, supabase_service
+        with httpx.Client(timeout=20.0, follow_redirects=True) as _c:
+            _data = _c.get(ref_uri).content
+        _padded = image_service.pad_to_ratio_range(_data)
+        if _padded != _data:
+            ref_uri = supabase_service.upload_to_storage(
+                "wardrobe", "padded-refs", _padded, "ref.jpg", "image/jpeg")
+    except Exception as e:
+        logger.warning(f"ref-ratio normalize failed for '{item_label}': {e}")
+
     def _gen(p: str) -> str:
         task = client.text_to_image.create(
             model=model,
@@ -136,7 +200,8 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
         with httpx.Client(timeout=20.0, follow_redirects=True) as c:
             r = c.get(url)
             r.raise_for_status()
-        clean, problems = verify_clean_garment(r.content)
+        ctype = r.headers.get("content-type", "image/png").split(";")[0].strip()
+        clean, problems = verify_clean_garment(r.content, content_type=ctype)
         if not clean:
             logger.info(f"'{item_label}': verify failed ({problems}); retrying once")
             retry_prompt = prompt + (
@@ -154,33 +219,36 @@ def _generate_with_verify(prompt: str, ref_uri: str, ref_tag: str, model: str,
     return url
 
 
-def clean_with_rembg(image_bytes: bytes, background: tuple = (255, 255, 255)) -> bytes:
+def clean_with_rembg(image_bytes: bytes) -> bytes:
     """
-    Remove background using rembg, composite onto a solid color (default white).
-    Returns JPEG bytes.
+    Remove background using rembg. Returns transparent PNG bytes (RGBA).
+    The garment floats on whatever background the UI provides.
     """
     from rembg import remove
     session = _get_rembg_session()
 
-    # remove() returns RGBA PNG bytes
-    cutout_png = remove(image_bytes, session=session)
+    cutout_png = remove(image_bytes, session=session)   # already RGBA PNG
     cutout = Image.open(io.BytesIO(cutout_png)).convert("RGBA")
+    cutout = _fit_portrait_3x4_rgba(cutout)
 
-    # Composite onto solid background
-    canvas = Image.new("RGB", cutout.size, background)
-    canvas.paste(cutout, mask=cutout.split()[3])  # alpha as mask
-
-    # Center-crop and pad to a 3:4 portrait so the wardrobe grid looks consistent
-    canvas = _fit_portrait_3x4(canvas, background)
-
-    # Encode as JPEG
     buf = io.BytesIO()
-    canvas.save(buf, format="JPEG", quality=88)
+    cutout.save(buf, format="PNG")
     return buf.getvalue()
 
 
+def _fit_portrait_3x4_rgba(img: Image.Image) -> Image.Image:
+    """Resize + pad to 768x1024 on a fully transparent canvas (RGBA)."""
+    target_w, target_h = 768, 1024
+    img.thumbnail((target_w, target_h), Image.LANCZOS)
+    canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+    x = (target_w - img.width) // 2
+    y = (target_h - img.height) // 2
+    canvas.paste(img, (x, y), mask=img.split()[3])
+    return canvas
+
+
 def _fit_portrait_3x4(img: Image.Image, background: tuple) -> Image.Image:
-    """Resize + pad an image to a clean 768x1024 (3:4 portrait) on the given background."""
+    """Resize + pad to 768x1024 on a solid background. Used by the Runway verify loop."""
     target_w, target_h = 768, 1024
     img.thumbnail((target_w, target_h), Image.LANCZOS)
     canvas = Image.new("RGB", (target_w, target_h), background)
@@ -262,7 +330,7 @@ def clean_garment_bytes(
     item_category: str = "tops",
     item_image_url: str | None = None,
     prefer: Literal["auto", "runway", "rembg", "none"] = "auto",
-) -> tuple[bytes, CleanMethod]:
+) -> tuple[bytes, CleanMethod, str]:
     """
     Run the cleanup pipeline on raw image bytes.
 
@@ -277,34 +345,33 @@ def clean_garment_bytes(
             'rembg'  -> only rembg
             'none'   -> return original unchanged
 
-    Returns: (output_bytes, method_used)
+    Returns: (output_bytes, method_used, content_type)
+        content_type is "image/png" for rembg (transparent), "image/jpeg" for runway/original.
     """
     if prefer == "none":
-        return image_bytes, "skipped"
+        return image_bytes, "skipped", "image/jpeg"
 
     # Try Runway first if a public URL is available
     if prefer in ("auto", "runway") and item_image_url:
         runway_url = clean_with_runway(item_image_url, item_name, item_category)
         if runway_url:
-            # Download the Runway-generated image
             try:
                 import httpx
                 with httpx.Client(timeout=20.0, follow_redirects=True) as c:
                     r = c.get(runway_url)
                     r.raise_for_status()
-                return r.content, "runway"
+                return r.content, "runway", "image/jpeg"
             except Exception as e:
                 logger.warning(f"Could not download Runway result: {e}")
                 # Fall through to rembg
 
     if prefer == "runway":
-        # User asked for Runway only; on fail return original
-        return image_bytes, "original"
+        return image_bytes, "original", "image/jpeg"
 
-    # rembg path
+    # rembg path — produces transparent PNG
     try:
         cleaned = clean_with_rembg(image_bytes)
-        return cleaned, "rembg"
+        return cleaned, "rembg", "image/png"
     except Exception as e:
         logger.error(f"rembg failed: {e}")
-        return image_bytes, "original"
+        return image_bytes, "original", "image/jpeg"

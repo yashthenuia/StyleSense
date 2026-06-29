@@ -18,7 +18,7 @@ from services.anthropic_service import client, MODEL
 
 logger = logging.getLogger(__name__)
 
-COLOR_PROMPT = """Analyze the person's coloring in this selfie for personal color analysis (fashion styling).
+COLOR_PROMPT = """Analyze the person in this photo for personal styling (color analysis + body-aware fashion advice).
 
 Reply with ONLY a JSON object of this exact shape (no prose, no markdown fences):
 {
@@ -27,15 +27,24 @@ Reply with ONLY a JSON object of this exact shape (no prose, no markdown fences)
   "contrast": "low" | "medium" | "high",
   "flattering_colors": ["6-10 specific colors that suit them"],
   "avoid_colors": ["3-6 colors that wash them out or clash"],
-  "notes": "one short sentence of styling guidance for their coloring"
+  "body_type": "rectangle" | "hourglass" | "pear" | "inverted_triangle" | "apple" | "unknown",
+  "face_shape": "oval" | "round" | "square" | "heart" | "oblong" | "diamond" | "unknown",
+  "hair": "short phrase: length, color, texture (e.g. 'short black curly')",
+  "photo_scope": "face" | "upper_body" | "full_body",
+  "notes": "one short sentence of styling guidance for their coloring + body"
 }
 
-Base it on visible skin undertone, hair, and eye color. If lighting is poor,
-make your best reasonable estimate. Return ONLY the JSON."""
+Base coloring on visible skin undertone, hair, and eye color. Judge body_type ONLY if the
+torso/full body is visible; if only the face/head is visible, set body_type and face guidance
+to "unknown" and photo_scope to "face". If lighting is poor, make your best reasonable
+estimate. Return ONLY the JSON."""
 
 VALID_UNDERTONE = {"warm", "cool", "neutral"}
 VALID_SEASON = {"spring", "summer", "autumn", "winter"}
 VALID_CONTRAST = {"low", "medium", "high"}
+VALID_BODY = {"rectangle", "hourglass", "pear", "inverted_triangle", "apple", "unknown"}
+VALID_FACE = {"oval", "round", "square", "heart", "oblong", "diamond", "unknown"}
+VALID_SCOPE = {"face", "upper_body", "full_body"}
 
 
 def _strip_json(text: str) -> str:
@@ -50,12 +59,19 @@ def _normalize(data: dict) -> dict:
     undertone = str(data.get("undertone", "")).strip().lower()
     season = str(data.get("season", "")).strip().lower()
     contrast = str(data.get("contrast", "")).strip().lower()
+    body = str(data.get("body_type", "")).strip().lower().replace(" ", "_").replace("-", "_")
+    face = str(data.get("face_shape", "")).strip().lower()
+    scope = str(data.get("photo_scope", "")).strip().lower().replace(" ", "_").replace("-", "_")
     return {
         "undertone": undertone if undertone in VALID_UNDERTONE else "neutral",
         "season": season if season in VALID_SEASON else "",
         "contrast": contrast if contrast in VALID_CONTRAST else "medium",
         "flattering_colors": [str(c).strip() for c in (data.get("flattering_colors") or [])][:10],
         "avoid_colors": [str(c).strip() for c in (data.get("avoid_colors") or [])][:6],
+        "body_type": body if body in VALID_BODY else "unknown",
+        "face_shape": face if face in VALID_FACE else "unknown",
+        "hair": str(data.get("hair", "")).strip()[:80],
+        "photo_scope": scope if scope in VALID_SCOPE else "face",
         "notes": str(data.get("notes", "")).strip()[:300],
     }
 
@@ -93,16 +109,48 @@ def analyze_color_profile(selfie_url: str) -> Optional[dict]:
         return None
 
 
+def _primary_selfie(user_row: dict) -> Optional[str]:
+    return user_row.get("avatar_selfie_url") or (user_row.get("selfie_urls") or [None])[0]
+
+
+def best_profile_source(user_row: dict) -> Optional[str]:
+    """Pick the best photo to analyze: the full-body photo (covers color + body + hair)
+    if present, else the primary face selfie. Used by every profile-analysis caller."""
+    if not user_row:
+        return None
+    return user_row.get("full_body_url") or _primary_selfie(user_row)
+
+
+def best_face_source(user_row: dict) -> Optional[str]:
+    """Best photo for FACE/identity (try-on): the face selfie, else the full-body photo
+    (which still contains a face). None if the user has uploaded neither."""
+    if not user_row:
+        return None
+    return _primary_selfie(user_row) or user_row.get("full_body_url")
+
+
+def best_body_source(user_row: dict) -> Optional[str]:
+    """Best photo for BODY/proportions (avatar, optional try-on ref): the full-body photo,
+    else the face selfie. None if neither exists."""
+    if not user_row:
+        return None
+    return user_row.get("full_body_url") or _primary_selfie(user_row)
+
+
 def format_color_profile(profile: Optional[dict]) -> str:
     """Render a profile into a compact line for an LLM system prompt."""
     if not profile:
         return "(no color profile yet)"
     flattering = ", ".join(profile.get("flattering_colors") or []) or "?"
     avoid = ", ".join(profile.get("avoid_colors") or []) or "?"
+    body = profile.get("body_type") or "unknown"
+    face = profile.get("face_shape") or "unknown"
+    hair = profile.get("hair") or "?"
     return (
         f"Undertone: {profile.get('undertone', '?')}; "
         f"Season: {profile.get('season') or '?'}; "
         f"Contrast: {profile.get('contrast', '?')}. "
         f"Flattering colors: {flattering}. Avoid: {avoid}. "
+        f"Body type: {body}; Face shape: {face}; Hair: {hair}. "
         f"{profile.get('notes', '')}"
     ).strip()

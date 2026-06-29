@@ -2,28 +2,37 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Copy, Check, Loader2, Sparkles, Users, MessagesSquare, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { LogOut, Loader2, Sparkles, Menu, X, Home, MessageCircle, Shirt, Layers, Bell, Users, Settings } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { toast } from "@/components/ui/Toast";
 import { useTasks, selectRunningCount } from "@/store/tasks";
-import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { useAppStore } from "@/store/app";
 
 const PRIMARY_NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/wardrobe",  label: "Wardrobe" },
-  { href: "/studio",    label: "Studio" },
-  { href: "/outfits",   label: "Outfits" },
-  { href: "/stylist",   label: "Aria" },
+  { href: "/dashboard", label: "HOME" },
+  { href: "/studio",    label: "STUDIO" },
+  { href: "/stylist",   label: "ARIA" },
+];
+
+// Mobile drawer mirrors PRIMARY_NAV + the desktop Sidebar, since both are hidden on mobile.
+const MOBILE_NAV = [
+  { href: "/dashboard", label: "Home",     icon: Home },
+  { href: "/studio",    label: "Studio",   icon: Sparkles },
+  { href: "/stylist",   label: "Aria",     icon: MessageCircle },
+  { href: "/wardrobe",  label: "Wardrobe", icon: Shirt },
+  { href: "/outfits",   label: "Outfits",  icon: Layers },
+  { href: "/activity",  label: "Activity", icon: Bell },
+  { href: "/friends",   label: "Friends",  icon: Users },
+  { href: "/settings",  label: "Settings", icon: Settings },
 ];
 
 export function Topbar() {
   const { user, profile, signOut } = useAuth();
+  const avatarSelfieUrl = useAppStore((s) => s.avatarSelfieUrl);
   const pathname = usePathname();
-  const supabase = getSupabaseBrowser();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [pendingFriends, setPendingFriends] = useState(0);
-  const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const runningCount = useTasks(selectRunningCount);
 
@@ -35,206 +44,153 @@ export function Topbar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-
-    async function load() {
-      const [friendsRes, msgsRes] = await Promise.all([
-        supabase.from("friendships").select("id", { count: "exact", head: true })
-          .eq("addressee_id", user!.id).eq("status", "pending"),
-        supabase.from("messages").select("id", { count: "exact", head: true })
-          .eq("recipient_id", user!.id).is("read_at", null),
-      ]);
-      if (!mounted) return;
-      setPendingFriends(friendsRes.count ?? 0);
-      setUnreadMsgs(msgsRes.count ?? 0);
-    }
-    load();
-
-    const channel = supabase
-      .channel(`topbar:${user.id}`)
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${user.id}` },
-        () => setUnreadMsgs((n) => n + 1))
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` },
-        () => setPendingFriends((n) => n + 1))
-      .subscribe();
-
-    return () => { mounted = false; supabase.removeChannel(channel); };
-  }, [user, supabase]);
-
-  function copyShareCode() {
-    if (!profile?.share_code) return;
-    navigator.clipboard.writeText(profile.share_code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-    toast.success("Share code copied!");
-  }
-
   const initial = (profile?.full_name?.[0] || user?.email?.[0] || "?").toUpperCase();
 
+  function handleBrandClick() {
+    if (pathname !== "/dashboard") {
+      router.push("/dashboard");
+    }
+  }
+
   return (
-    <header
-      className="flex items-center px-8 py-4 relative gap-6 shrink-0"
-      style={{ borderBottom: "1px solid var(--border)" }}
-    >
-      {/* LEFT — Brand + tasks */}
-      <div className="flex items-center gap-4 min-w-0">
-        <Link href="/dashboard" className="font-display tracking-tight" style={{ color: "var(--gold)", fontSize: "1.6rem", textDecoration: "none" }}>
-          StyleSense
-        </Link>
-        {runningCount > 0 && (
-          <Link
-            href="/studio"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full"
-            style={{
-              background: "var(--gold-dim)",
-              border: "1px solid var(--border-gold)",
-              color: "var(--gold)",
-              textDecoration: "none",
-              fontSize: "0.8rem",
-            }}
-            title="Click to view in Studio"
+    <>
+      <header
+        className="flex items-center px-4 md:px-8 py-4 relative gap-4 md:gap-6 shrink-0"
+        style={{ borderBottom: "2px solid #3C2415" }}
+      >
+        {/* LEFT — Brand (home) + tasks */}
+        <div id="topbar-brand-group" className="flex items-center gap-2 md:gap-4 min-w-0 cursor-pointer" onClick={handleBrandClick}>
+          <Link 
+            href="/dashboard" 
+            className="font-display tracking-tight cursor-pointer" 
+            style={{ color: "var(--ink)", fontSize: "clamp(1.2rem, 4vw, 1.6rem)", textDecoration: "none" }}
           >
-            <Loader2 size={12} className="spin" />
-            <span>{runningCount} {runningCount === 1 ? "task" : "tasks"} running</span>
-            <Sparkles size={11} />
+            StyleSense
           </Link>
-        )}
-      </div>
-
-      {/* CENTER — Primary nav */}
-      <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
-        {PRIMARY_NAV.map(({ href, label }) => {
-          const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
-          return (
+          {runningCount > 0 && (
             <Link
-              key={href}
-              href={href}
-              className="relative px-3 py-2 text-sm transition-colors"
+              href="/studio"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs"
               style={{
-                color: active ? "var(--gold)" : "var(--text-muted)",
+                background: "var(--surface2)",
+                border: "1px solid var(--border-hover)",
+                color: "var(--ink)",
                 textDecoration: "none",
-                fontWeight: active ? 600 : 500,
               }}
+              title="Click to view in Studio"
             >
-              {label}
-              {active && (
-                <span
-                  className="absolute left-2 right-2"
-                  style={{ bottom: -1, height: 2, background: "var(--gold)", borderRadius: 2 }}
-                />
-              )}
+              <Loader2 size={12} className="spin" />
+              <span>{runningCount} {runningCount === 1 ? "task" : "tasks"} running</span>
+              <Sparkles size={11} />
             </Link>
-          );
-        })}
-      </nav>
-
-      {/* RIGHT — Friends, Chat, Avatar */}
-      <div className="ml-auto flex items-center gap-1">
-        <Link
-          href="/friends"
-          title="Friends"
-          aria-label="Friends"
-          className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
-          style={{
-            color: pathname?.startsWith("/friends") ? "var(--gold)" : "var(--text-muted)",
-            background: pathname?.startsWith("/friends") ? "var(--gold-dim)" : "transparent",
-          }}
-        >
-          <Users size={18} strokeWidth={1.6} />
-          {pendingFriends > 0 && (
-            <span
-              className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
-              style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
-            >
-              {pendingFriends}
-            </span>
-          )}
-        </Link>
-
-        <Link
-          href="/chat"
-          title="Chat"
-          aria-label="Chat"
-          className="relative w-10 h-10 flex items-center justify-center rounded-[10px] transition-colors"
-          style={{
-            color: pathname?.startsWith("/chat") ? "var(--gold)" : "var(--text-muted)",
-            background: pathname?.startsWith("/chat") ? "var(--gold-dim)" : "transparent",
-          }}
-        >
-          <MessagesSquare size={18} strokeWidth={1.6} />
-          {unreadMsgs > 0 && (
-            <span
-              className="absolute top-1 right-1 text-[10px] font-semibold px-1 rounded-full"
-              style={{ background: "var(--gold)", color: "var(--on-gold)", minWidth: 16, textAlign: "center" }}
-            >
-              {unreadMsgs}
-            </span>
-          )}
-        </Link>
-
-        <div ref={ref} className="relative ml-2">
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-3 cursor-pointer"
-            style={{ background: "none", border: "none", color: "var(--text)" }}
-          >
-            <div
-              className="rounded-full flex items-center justify-center font-semibold text-sm"
-              style={{
-                width: 36, height: 36,
-                background: "var(--gold-dim)",
-                color: "var(--gold)",
-                border: "1px solid var(--border-gold)",
-              }}
-            >
-              {initial}
-            </div>
-          </button>
-
-          {open && (
-            <div
-              className="absolute right-0 top-full mt-2 surface p-2 min-w-[260px]"
-              style={{ zIndex: 50 }}
-            >
-              {profile?.share_code && (
-                <button
-                  onClick={copyShareCode}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md hover:bg-surface3 text-left"
-                  style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
-                >
-                  <div>
-                    <div className="text-xs" style={{ color: "var(--text-muted)" }}>Your share code</div>
-                    <div className="font-mono text-sm" style={{ color: "var(--gold)", letterSpacing: "0.1em" }}>
-                      {profile.share_code}
-                    </div>
-                  </div>
-                  {copied ? <Check size={14} color="var(--green)" /> : <Copy size={14} />}
-                </button>
-              )}
-              <div style={{ height: 1, background: "var(--border)", margin: "6px 0" }} />
-              <Link
-                href="/onboarding"
-                onClick={() => setOpen(false)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm"
-                style={{ color: "var(--text)", textDecoration: "none", borderRadius: 8 }}
-              >
-                <User size={14} /> Avatar Setup
-              </Link>
-              <button
-                onClick={signOut}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm"
-                style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
-              >
-                <LogOut size={14} /> Sign out
-              </button>
-            </div>
           )}
         </div>
-      </div>
-    </header>
+
+        {/* CENTER — Primary nav (Dashboard, Studio, Aria) */}
+        <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
+          {PRIMARY_NAV.map(({ href, label }) => {
+            const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={
+                  active
+                    ? "text-[#3C2415] font-bold px-4 py-2 text-sm transition-all tracking-wide"
+                    : "text-[#84634c] font-normal px-4 py-2 text-sm transition-all tracking-wide hover:text-[#3C2415]"
+                }
+                style={{ textDecoration: "none" }}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* RIGHT — Mobile utility drawer + User dropdown */}
+        <div className="ml-auto flex items-center gap-1 md:gap-2">
+          {/* Mobile hamburger for utility drawer */}
+          <button
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="md:hidden w-10 h-10 flex items-center justify-center transition-colors"
+            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}
+            aria-label="Menu"
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+
+          <div ref={ref} className="relative ml-1 md:ml-2">
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="flex items-center gap-3 cursor-pointer"
+              style={{ background: "none", border: "none", color: "var(--text)" }}
+            >
+              <div
+                className="rounded-full flex items-center justify-center font-semibold text-sm overflow-hidden flex-shrink-0"
+                style={{
+                  width: 36, height: 36,
+                  background: avatarSelfieUrl ? "transparent" : "var(--surface2)",
+                  color: "var(--ink)",
+                  border: "2px solid #3C2415",
+                }}
+              >
+                {avatarSelfieUrl ? (
+                  <img
+                    src={avatarSelfieUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  initial
+                )}
+              </div>
+            </button>
+
+            {open && (
+              <div
+                className="absolute right-0 top-full mt-2 surface p-2 min-w-[180px]"
+                style={{ zIndex: 50 }}
+              >
+                <button
+                  onClick={signOut}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+                  style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer", borderRadius: 8 }}
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile nav drawer — full tab set, since the center nav + sidebar are desktop-only */}
+      {mobileMenuOpen && (
+        <nav className="md:hidden shrink-0 border-b" style={{ background: "var(--bg)", borderColor: "rgba(60,36,21,0.2)" }}>
+          <div className="px-2 py-2">
+            {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
+              const active = href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm tracking-wide transition-colors"
+                  style={{
+                    textDecoration: "none",
+                    fontWeight: active ? 700 : 400,
+                    color: active ? "#3C2415" : "#84634c",
+                    background: active ? "var(--parchment)" : "transparent",
+                  }}
+                >
+                  <Icon size={16} />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+    </>
   );
 }

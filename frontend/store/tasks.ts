@@ -38,6 +38,7 @@ export interface TryOnTask extends BaseTask {
   // Outputs
   resultUrl?: string;
   resultId?: string;
+  nobgUrl?: string;
   // Derived
   eventUrl?: string;
   videoUrl?: string;
@@ -118,7 +119,7 @@ export const useTasks = create<State>((set, get) => ({
     const model = input.model ?? (input.quality === "pro" ? "gen4_image" : "gen4_image_turbo");
     const setting = input.setting?.trim() || undefined;
     const promise = input.items.length === 1
-      ? apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate", {
+      ? apiPost<{ result_image_url: string; result_id: string; result_nobg_url?: string }>("/api/tryon/generate", {
           wardrobe_item_id: input.items[0].id,
           item_image_url: input.items[0].image_url,
           avatar_selfie_url: input.avatarSelfieUrl,
@@ -128,7 +129,7 @@ export const useTasks = create<State>((set, get) => ({
           enhance_prompt: input.enhancePrompt,
           reference_selfie_urls: input.referenceSelfieUrls,
         })
-      : apiPost<{ result_image_url: string; result_id: string }>("/api/tryon/generate-multi", {
+      : apiPost<{ result_image_url: string; result_id: string; result_nobg_url?: string }>("/api/tryon/generate-multi", {
           avatar_selfie_url: input.avatarSelfieUrl,
           items: input.items.map((i) => ({ image_url: i.image_url, name: i.name, category: i.category })),
           model, setting,
@@ -145,6 +146,7 @@ export const useTasks = create<State>((set, get) => ({
           finishedAt: Date.now(),
           resultUrl: res.result_image_url,
           resultId: res.result_id,
+          nobgUrl: res.result_nobg_url ?? undefined,
         });
         toast.success(`Try-on ready: ${task.label.slice(0, 40)}`);
       })

@@ -1,249 +1,314 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
-import { Loader2, Camera, Star, Trash2, Plus, Sparkles, Check } from "lucide-react";
-import Link from "next/link";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Camera, Loader2, Plus } from "lucide-react";
+import { apiUpload } from "@/lib/api";
 import { useAppStore } from "@/store/app";
-import { useAuth } from "@/components/AuthProvider";
-import { apiGet, apiUpload, apiDelete } from "@/lib/api";
-import { toast } from "@/components/ui/Toast";
-import { ConfirmDialog } from "@/components/ui/Dialog";
-import { useSeenOnce } from "@/lib/useSeenOnce";
+import { AddItemModal } from "@/components/wardrobe/AddItemModal";
+import type { WardrobeItem } from "@/types";
 
-interface SelfieListResponse {
-  selfie_urls: string[];
-  primary_url: string | null;
-}
+type Step = 1 | 2 | 3;
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
-  const { avatarSelfieUrl, setSelfieOnly } = useAppStore();
+  const router = useRouter();
+  const setSelected = useAppStore((s) => s.setSelected);
+
+  const [step, setStep] = useState<Step>(1);
   const [uploading, setUploading] = useState(false);
-  const [selfies, setSelfies] = useState<string[]>([]);
-  const [primaryUrl, setPrimaryUrl] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const tipsSeen = useSeenOnce("onboarding-tips");
+  const [selfieThumb, setSelfieThumb] = useState<string | null>(null);
+  const [addedItem, setAddedItem] = useState<WardrobeItem | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const refreshSelfies = useCallback(async () => {
-    try {
-      const data = await apiGet<SelfieListResponse>("/api/avatar/selfies");
-      setSelfies(data.selfie_urls);
-      setPrimaryUrl(data.primary_url);
-      if (data.primary_url && data.primary_url !== avatarSelfieUrl) {
-        setSelfieOnly(data.primary_url);
-      }
-    } catch {
-      // v2d migration may not be applied; selfie list endpoint silently no-ops
-    }
-  }, [avatarSelfieUrl, setSelfieOnly]);
-
-  useEffect(() => {
-    if (!user) return;
-    refreshSelfies();
-  }, [user, refreshSelfies]);
-
-  async function handleUpload(file: File) {
+  async function handleSelfie(file: File) {
+    setSelfieThumb(URL.createObjectURL(file));
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await apiUpload<{ selfie_url: string; selfie_urls?: string[] }>(
-        "/api/avatar/upload-selfie", fd
-      );
-      setSelfieOnly(res.selfie_url);
-      if (res.selfie_urls) setSelfies(res.selfie_urls);
-      await refreshSelfies();
-      toast.success("Selfie uploaded.");
-    } catch (e) {
-      toast.error(`Upload failed: ${e instanceof Error ? e.message : "unknown"}`);
+      await apiUpload("/api/avatar/upload-selfie", fd);
+    } catch {
+      // non-fatal — thumbnail still shown, user continues
     } finally {
       setUploading(false);
+      setStep(2);
     }
   }
 
-  async function setPrimary(url: string) {
-    try {
-      const fd = new FormData();
-      fd.append("url", url);
-      const res = await apiUpload<{ primary_url: string }>(
-        "/api/avatar/set-primary-selfie", fd
-      );
-      setPrimaryUrl(res.primary_url);
-      setSelfieOnly(res.primary_url);
-      toast.success("Primary selfie updated.");
-    } catch (e) {
-      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
-    }
+  function handleAdded(item: WardrobeItem) {
+    setModalOpen(false);
+    setAddedItem(item);
+    setSelected([item.id]);
+    setStep(3);
   }
 
-  async function removeSelfie(url: string) {
-    try {
-      await apiDelete<{ selfie_urls: string[]; primary_url: string | null }>(
-        `/api/avatar/selfie?url=${encodeURIComponent(url)}`
-      );
-      await refreshSelfies();
-      toast.success("Selfie removed.");
-    } catch (e) {
-      toast.error(`Failed: ${e instanceof Error ? e.message : "unknown"}`);
+  function handleAddedMany(items: WardrobeItem[]) {
+    setModalOpen(false);
+    if (items.length > 0) {
+      setAddedItem(items[0]);
+      setSelected(items.map((i) => i.id));
     }
+    setStep(3);
   }
 
   return (
-    <div className="max-w-3xl">
-      <PageHeader
-        eyebrow="Setup"
-        title="Add your selfies."
-        tutorialKey="onboarding"
-        subtitle="Upload up to 3 selfies. Your primary one is used as the model in try-ons."
-      />
-
-      {/* Single step: selfie gallery */}
-      <motion.section
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="surface p-7 mb-5"
-        style={{ borderColor: avatarSelfieUrl ? "var(--border)" : "var(--border-gold)" }}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-4 py-12"
+      style={{ background: "var(--parchment)" }}
+    >
+      <div
+        style={{
+          maxWidth: 480,
+          width: "100%",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          padding: 24,
+          borderRadius: 12,
+        }}
       >
-        <div className="flex items-center gap-3 mb-4">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
-            style={{
-              background: avatarSelfieUrl ? "var(--gold)" : "var(--gold-dim)",
-              color: avatarSelfieUrl ? "var(--on-gold)" : "var(--gold)",
-            }}
-          >
-            {avatarSelfieUrl ? <Check size={16} /> : "1"}
-          </div>
-          <h2 className="font-display text-2xl">Your selfies</h2>
-        </div>
+        {/* Progress dots */}
+        <ProgressDots current={step} total={3} />
 
-        <div className="flex flex-wrap gap-3 mb-3">
-          {selfies.map((url) => {
-            const isPrimary = url === primaryUrl;
-            return (
-              <div
-                key={url}
-                className="relative surface overflow-hidden group"
-                style={{
-                  width: 130, height: 160, padding: 0,
-                  borderColor: isPrimary ? "var(--gold)" : undefined,
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="Selfie" className="w-full h-full object-cover" />
-                {isPrimary && (
-                  <div
-                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1"
-                    style={{ background: "var(--gold)", color: "var(--on-gold)" }}
-                  >
-                    <Star size={10} /> Primary
-                  </div>
-                )}
-                {!isPrimary && (
-                  <button
-                    onClick={() => setPrimary(url)}
-                    className="absolute top-1 left-1 px-2 py-0.5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", cursor: "pointer" }}
-                  >
-                    <Star size={10} /> Set primary
-                  </button>
-                )}
-                <button
-                  onClick={() => setPendingDelete(url)}
-                  className="absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                  style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--red)", cursor: "pointer" }}
-                  aria-label="Remove"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            );
-          })}
-
-          {selfies.length < 3 && (
-            <SelfieDropzone onFile={handleUpload} loading={uploading} preview={null} compact />
-          )}
-        </div>
-
-        <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {selfies.length === 0 && "Upload your first selfie to get started."}
-          {selfies.length > 0 && selfies.length < 3 && `${3 - selfies.length} more slot${3 - selfies.length === 1 ? "" : "s"} available.`}
-          {selfies.length === 3 && "Maximum reached. Delete one to upload another."}
-        </div>
-
-        {!tipsSeen && (
-          <div className="text-xs mt-3" style={{ color: "var(--text-dim)" }}>
-            <strong>Tips:</strong> Front-facing, shoulders visible, even lighting, plain background, 512×512 min, JPEG/PNG/WebP up to 16MB.
-          </div>
+        {step === 1 && (
+          <StepSelfie
+            uploading={uploading}
+            selfieThumb={selfieThumb}
+            fileRef={fileRef}
+            onFile={handleSelfie}
+            onSkip={() => setStep(2)}
+          />
         )}
-      </motion.section>
 
-      {/* Stylist info card - no setup needed, always available */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="surface p-5 mb-5 flex items-start gap-4"
-        style={{ background: "var(--gold-dim)", borderColor: "var(--border-gold)" }}
-      >
-        <Sparkles size={20} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 2 }} />
-        <div className="flex-1 text-sm">
-          <div className="font-display text-lg mb-1" style={{ color: "var(--text)" }}>
-            Your AI stylist is ready
-          </div>
-          <p style={{ color: "var(--text-muted)" }}>
-            Aria, our admin stylist, is always available. No setup needed — go to{" "}
-            <Link href="/stylist" style={{ color: "var(--gold)", textDecoration: "underline" }}>
-              AI Stylist
-            </Link>{" "}
-            to talk or type with her about your wardrobe.
-          </p>
-        </div>
-      </motion.div>
+        {step === 2 && (
+          <StepWardrobe
+            onOpenModal={() => setModalOpen(true)}
+            onSkip={() => setStep(3)}
+          />
+        )}
 
-      <ConfirmDialog
-        open={!!pendingDelete}
-        onClose={() => setPendingDelete(null)}
-        title="Remove this selfie?"
-        description="It'll be removed from your gallery. Try-ons that already used it stay intact."
-        confirmLabel="Remove"
-        destructive
-        onConfirm={() => { if (pendingDelete) removeSelfie(pendingDelete); }}
+        {step === 3 && (
+          <StepReady
+            hasItem={!!addedItem}
+            onStudio={() => router.push("/studio")}
+            onDashboard={() => router.push("/dashboard")}
+          />
+        )}
+      </div>
+
+      {/* AddItemModal rendered at root level so its fixed overlay works correctly */}
+      <AddItemModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onAdded={handleAdded}
+        onAddedMany={handleAddedMany}
+        compact={true}
       />
     </div>
   );
 }
 
-function SelfieDropzone({
-  onFile, loading, preview, compact = false,
-}: {
-  onFile: (f: File) => void; loading: boolean; preview: string | null; compact?: boolean;
-}) {
-  const w = compact ? 130 : 200;
-  const h = compact ? 160 : 200;
+// ── Progress dots ────────────────────────────────────────────────────────────
+
+function ProgressDots({ current, total }: { current: number; total: number }) {
   return (
-    <label
-      className="surface flex items-center justify-center cursor-pointer overflow-hidden"
-      style={{ width: w, height: h, borderStyle: preview ? "solid" : "dashed" }}
-    >
-      {loading ? (
-        <Loader2 size={compact ? 22 : 28} className="spin" style={{ color: "var(--gold)" }} />
-      ) : preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={preview} alt="Selfie preview" className="w-full h-full object-cover" />
-      ) : (
-        <div className="text-center" style={{ color: "var(--text-dim)" }}>
-          {compact ? <Plus size={22} className="mx-auto mb-1" /> : <Camera size={28} className="mx-auto mb-2" />}
-          <div className="text-xs">{compact ? "Add another" : "Click to upload selfie"}</div>
-        </div>
-      )}
+    <div className="flex items-center justify-center gap-2 mb-8">
+      {Array.from({ length: total }, (_, i) => i + 1).map((s) => (
+        <span
+          key={s}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            display: "inline-block",
+            background: s <= current ? "var(--ink)" : "transparent",
+            border: "1.5px solid var(--ink)",
+            transition: "background 0.2s",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Step 1 — Upload selfie ────────────────────────────────────────────────────
+
+function StepSelfie({
+  uploading,
+  selfieThumb,
+  fileRef,
+  onFile,
+  onSkip,
+}: {
+  uploading: boolean;
+  selfieThumb: string | null;
+  fileRef: React.RefObject<HTMLInputElement>;
+  onFile: (f: File) => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div>
+      <h1 className="font-display text-4xl mb-2" style={{ color: "var(--ink)" }}>
+        First, let&apos;s set up your avatar.
+      </h1>
+      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+        Upload a front-facing photo. We&apos;ll use it to show outfits on you.
+      </p>
+
       <input
+        ref={fileRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/*"
         className="hidden"
-        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+        }}
       />
-    </label>
+
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        style={{
+          width: "100%",
+          height: 200,
+          border: "1.5px dashed var(--border)",
+          borderRadius: 8,
+          background: "var(--surface2)",
+          cursor: uploading ? "default" : "pointer",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          overflow: "hidden",
+          padding: 0,
+          position: "relative",
+        }}
+        aria-label="Upload selfie"
+      >
+        {uploading ? (
+          <>
+            <Loader2 size={28} className="spin" style={{ color: "var(--text-muted)" }} />
+            <span className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Uploading...
+            </span>
+          </>
+        ) : selfieThumb ? (
+          <img
+            src={selfieThumb}
+            alt="Selfie preview"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <>
+            <Camera size={28} style={{ color: "var(--text-dim)" }} />
+            <span className="text-sm" style={{ color: "var(--text-dim)" }}>
+              Click to upload a photo
+            </span>
+          </>
+        )}
+      </button>
+
+      <div className="flex justify-center mt-5">
+        <button
+          onClick={onSkip}
+          className="text-sm"
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            textDecoration: "underline",
+          }}
+        >
+          Skip for now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 2 — Add wardrobe item ────────────────────────────────────────────────
+
+function StepWardrobe({
+  onOpenModal,
+  onSkip,
+}: {
+  onOpenModal: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div>
+      <h1 className="font-display text-4xl mb-2" style={{ color: "var(--ink)" }}>
+        Now add something from your wardrobe.
+      </h1>
+      <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>
+        Paste a product URL or upload a photo.
+      </p>
+
+      <button
+        className="btn-primary"
+        onClick={onOpenModal}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+      >
+        <Plus size={16} />
+        Add an item
+      </button>
+
+      <div className="flex justify-center mt-5">
+        <button
+          onClick={onSkip}
+          className="text-sm"
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            textDecoration: "underline",
+          }}
+        >
+          Skip for now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 3 — You're ready ─────────────────────────────────────────────────────
+
+function StepReady({
+  hasItem,
+  onStudio,
+  onDashboard,
+}: {
+  hasItem: boolean;
+  onStudio: () => void;
+  onDashboard: () => void;
+}) {
+  return (
+    <div className="text-center py-6">
+      <h1 className="font-display text-4xl mb-4" style={{ color: "var(--ink)" }}>
+        You&apos;re all set.
+      </h1>
+      {hasItem ? (
+        <>
+          <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>
+            Head to Studio to try on your first look.
+          </p>
+          <button className="btn-primary" onClick={onStudio}>
+            Try it on &rarr;
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>
+            Explore your wardrobe and add items anytime.
+          </p>
+          <button className="btn-primary" onClick={onDashboard}>
+            Go to Dashboard &rarr;
+          </button>
+        </>
+      )}
+    </div>
   );
 }

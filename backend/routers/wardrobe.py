@@ -7,17 +7,19 @@ Garment cleaning:
 """
 import asyncio
 import logging
+import httpx
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from typing import Optional, Literal
 from services import supabase_service, wardrobe_vision_service
 from services.auth_service import current_user
-from services.image_service import validate_image_bytes
-from services.garment_cleaner import clean_garment_bytes, clean_with_runway, runway_isolate_item
+from services.image_service import validate_image_bytes, fetch_image_from_url
+from services.garment_cleaner import clean_garment_bytes, clean_with_runway, runway_isolate_item, make_cutout
 from models.schemas import (
     AddWardrobeFromUrl,
     ExtractFromImage,
     DetectedItem,
     DetectItemsResponse,
+    DetectFromUrlRequest,
     AddMultiRequest,
     AddMultiResponse,
     AddMultiFailure,
@@ -27,6 +29,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 CleanPref = Literal["auto", "runway", "rembg", "none"]
+
+
+def _generate_cutout(user_id: str, image_url: str, category: Optional[str] = None, image_bytes: Optional[bytes] = None) -> Optional[str]:
+    """Best-effort transparent PNG cutout for the closet display. Returns a public URL
+    or None (callers fall back to image_url). Pass image_bytes to skip the re-download.
+    category picks the segmentation model (clothing vs general object)."""
+    try:
+        data = image_bytes if image_bytes is not None else httpx.get(
+            image_url, timeout=30, follow_redirects=True
+        ).content
+        png = make_cutout(data, category=category)
+        if not png:
+            return None
+        return supabase_service.upload_to_storage("wardrobe", user_id, png, "cutout.png", "image/png")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"cutout generation failed: {e}")
+        return None
 
 
 @router.get("")
@@ -110,6 +129,7 @@ async def upload_item(
         occasion=occasion,
         color=color,
         brand=brand,
+        cutout_url=None,  # cutouts disabled - the closet grid uses the clean image_url
     )
     item["clean_method"] = method_used
     item["original_url"] = original_url if final_url != original_url else None
@@ -171,6 +191,7 @@ async def add_from_url(req: AddWardrobeFromUrl, user = Depends(current_user)):
         brand=req.brand,
         source_url=req.source_url or req.image_url,
         tags=req.tags,
+        cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
     )
     item["clean_method"] = method_used
     item["original_url"] = original_url if final_url != original_url else None
@@ -216,6 +237,7 @@ async def extract_from_image(req: ExtractFromImage, user = Depends(current_user)
         occasion=req.occasion or "casual",
         source_url=req.image_url,
         tags=["extracted-from-friend"],
+        cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
     )
     item["clean_method"] = "runway-extract"
     return item
@@ -254,6 +276,31 @@ async def detect_items(
         content, file.content_type or "image/jpeg"
     )
     detected = [DetectedItem(**d) for d in detected_raw]
+    return DetectItemsResponse(image_url=image_url, detected=detected)
+
+
+@router.post("/detect-items-url", response_model=DetectItemsResponse)
+async def detect_items_url(req: DetectFromUrlRequest, user = Depends(current_user)):
+    """Same as /detect-items but from an image URL (pasted product/image link).
+    Re-hosts the image, detects garments, and returns the rehosted URL + detections.
+    The frontend then routes through the same review checklist + /add-multi (which
+    isolates each garment on a clean background)."""
+    try:
+        content, ctype = fetch_image_from_url(req.image_url)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"Could not download image from URL: {e}")
+
+    try:
+        image_url = supabase_service.upload_to_storage(
+            bucket="wardrobe", user_id=user["id"], file_bytes=content,
+            filename="from-url.jpg", content_type=ctype,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Upload failed: {e}")
+
+    detected = [DetectedItem(**d) for d in wardrobe_vision_service.detect_items_from_bytes(content, ctype)]
     return DetectItemsResponse(image_url=image_url, detected=detected)
 
 
@@ -316,6 +363,7 @@ async def add_multi(req: AddMultiRequest, user = Depends(current_user)):
                 brand=item.brand,
                 source_url=req.source_image_url,
                 tags=["multi-item-detected"],
+                cutout_url=None,  # cutouts disabled - the grid uses the clean image_url
             )
             return row, None
         except Exception as e:

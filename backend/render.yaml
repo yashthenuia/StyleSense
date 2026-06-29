@@ -35,6 +35,27 @@ services:
       - key: STYLIST_HERO_VIDEO_URL
         sync: false
 
+      # --- AWS Aurora (core relational data via IAM-token auth). See services/db.py. ---
+      # IAM mode mints a short-lived DB token per connection: no DB password, but the
+      # backend needs AWS creds (scoped to rds-db:connect) + region. Paste all of these
+      # in the Render dashboard (copy from backend/.env).
+      - key: AURORA_IAM_AUTH
+        value: "true"
+      - key: AURORA_PORT
+        value: "5432"
+      - key: AURORA_DB
+        value: postgres
+      - key: AURORA_USER
+        value: postgres
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AURORA_HOST
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
       # Your Vercel frontend URL -- drives CORS in main.py. Set after frontend deploy.
       - key: FRONTEND_URL
         sync: false
